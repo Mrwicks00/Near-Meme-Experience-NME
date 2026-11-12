@@ -15,7 +15,12 @@ async function forward(req: Request, ctx: { params: Promise<{ svc: string; path:
   try {
     const r = await fetch(`${t.base}/${p}${new URL(req.url).search}`, {
       method: req.method,
-      headers: body ? { "content-type": "application/json" } : undefined,
+      headers: {
+        ...(body ? { "content-type": "application/json" } : {}),
+        // Shared secret with the services (server env only, never sent to the browser) and the visitor's IP for their rate limits.
+        ...(process.env.SVC_TOKEN ? { "x-nme-token": process.env.SVC_TOKEN } : {}),
+        "x-forwarded-for": (req.headers.get("x-forwarded-for") ?? "").split(",")[0]!.trim() || "unknown",
+      },
       body,
       signal: AbortSignal.timeout(svc === "relayer" ? 300_000 : 90_000),
       cache: "no-store",

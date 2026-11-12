@@ -3,7 +3,7 @@ import { MAX_ICON_URL, DraftError } from "./draft.js";
 import type { Chain, Llm } from "./launch.js";
 
 const BASE = "https://cloud-api.near.ai/v1";
-export const DEFAULT_MODEL = "Qwen/Qwen3.8-27B"; // the brain worker's default (workers/brain/src/logic.rs)
+export const DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8"; // same as the brain worker: fast, with thinking off (Qwen3.8 reasons on every call)
 export const IMAGE_MODEL = "black-forest-labs/FLUX.2-klein-4B";
 
 async function post(url: string, key: string, body: object, ms: number): Promise<any> {
@@ -26,7 +26,7 @@ async function post(url: string, key: string, body: object, ms: number): Promise
 export class NearAiLlm implements Llm {
   constructor(private key: string, private model = DEFAULT_MODEL) {}
   async complete(system: string, user: string): Promise<string> {
-    const j = await post(`${BASE}/chat/completions`, this.key, { model: this.model, temperature: 0.4, max_tokens: 700, messages: [{ role: "system", content: system }, { role: "user", content: user }] }, 60_000);
+    const j = await post(`${BASE}/chat/completions`, this.key, { model: this.model, temperature: 0.4, max_tokens: 700, chat_template_kwargs: { enable_thinking: false }, messages: [{ role: "system", content: system }, { role: "user", content: user }] }, 60_000);
     return String(j?.choices?.[0]?.message?.content ?? "");
   }
 }

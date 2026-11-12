@@ -18,6 +18,8 @@ export interface Config {
   evmRpc: string;
   corsOrigin: string;
   trustProxy: boolean;
+  /** When set, every route but /health needs header `x-nme-token` equal to it (the site's server proxy sends it). */
+  token: string;
   registrationYocto: bigint;
 }
 
@@ -59,7 +61,9 @@ export function loadConfig(): Config {
     solanaRpc: process.env.SOLANA_RPC ?? "https://api.devnet.solana.com",
     evmRpc: process.env.EVM_RPC ?? "https://1rpc.io/sepolia",
     corsOrigin: process.env.CORS_ORIGIN ?? "*",
-    trustProxy: process.env.TRUST_PROXY === "1",
+    // Behind the site's proxy (token set) the client IP arrives in x-forwarded-for; only the proxy can send it.
+    trustProxy: process.env.TRUST_PROXY === "1" || !!process.env.SVC_TOKEN,
+    token: process.env.SVC_TOKEN ?? "",
     registrationYocto: 1_250_000_000_000_000_000_000n, // 0.00125 NEAR: NEP-145 minimum on NME coins and wNEAR
   };
 }

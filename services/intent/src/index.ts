@@ -13,5 +13,6 @@ const server = makeServer({
   wrap: process.env.WRAP ?? "wrap.testnet",
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
   perMin: Number(process.env.RATE_PER_MIN ?? 10),
+  token: process.env.SVC_TOKEN ?? "",
 });
 server.listen(port, () => console.log(`nme intent service on :${port} (parse + preview only, no signing), root ${root}`));

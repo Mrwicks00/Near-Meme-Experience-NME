@@ -32,3 +32,19 @@ test("HTTP: health, config, bad input, big bodies, unknown paths, and a signed a
     server.close();
   }
 });
+
+test("HTTP with a shared token: only /health is open; the right header passes", async () => {
+  const chain = new FakeChain();
+  const relayer = new Relayer(chain, { ratePerMin: 5, ratePerDay: 50, ipPerMin: 50, globalPerMin: 50, gateway: "gateway.nme.testnet", arena: "arena.nme.testnet", factory: "nme.testnet", registrationYocto: 1n }, async () => {});
+  const server = makeServer(relayer, { corsOrigin: "*", trustProxy: true, token: "s3cret-token" });
+  await new Promise<void>((r) => server.listen(0, r));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    assert.equal((await fetch(base + "/health")).status, 200);
+    assert.equal((await fetch(base + "/config")).status, 401);
+    assert.equal((await fetch(base + "/config", { headers: { "x-nme-token": "wrong" } })).status, 401);
+    assert.equal((await fetch(base + "/config", { headers: { "x-nme-token": "s3cret-token" } })).status, 200);
+  } finally {
+    server.close();
+  }
+});

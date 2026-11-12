@@ -22,6 +22,9 @@ FUNDER="${NME_RESERVE_FUNDER:-nme-pub.testnet}"
 RES_MIN="${NME_RESERVE_MIN:-6}"
 RES_TARGET="${NME_RESERVE_TARGET:-11}"
 FUNDER_KEEP="${NME_FUNDER_KEEP:-0.5}"
+# How near-cli signs: the OS keychain on a laptop; on a server use NME_SIGN=sign-with-legacy-keychain (key files in
+# ~/.near-credentials/testnet/<account>.json).
+SIGN="${NME_SIGN:-sign-with-keychain}"
 PROTO_MIN="${NME_PROTO_MIN:-0.3}"
 PROTO_TARGET="${NME_PROTO_TARGET:-1}"
 KEEPER_REFILL="${NME_KEEPER_REFILL:-0.6}"
@@ -50,7 +53,7 @@ check_reserve() {
     echo "$(date -u +%FT%TZ) RESERVE LOW: $R NEAR (< $RES_MIN) and $FUNDER has only $FB NEAR. Send testnet NEAR to $FUNDER."; return 0
   fi
   OUT=$(near contract call-function as-transaction "$GATEWAY" fund_reserve json-args '{}' prepaid-gas '30 Tgas' attached-deposit "$AMT NEAR" \
-    sign-as "$FUNDER" network-config testnet sign-with-keychain send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+    sign-as "$FUNDER" network-config testnet $SIGN send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
   TX=$(echo "$OUT" | grep -oE 'Transaction ID: [A-Za-z0-9]+' | head -1)
   if [ -n "$TX" ]; then echo "$(date -u +%FT%TZ) RESERVE was $R NEAR -> funded $AMT NEAR from $FUNDER (${TX#Transaction ID: })"; else echo "$(date -u +%FT%TZ) RESERVE top-up failed: $(echo "$OUT" | grep -iE 'error|panic' | head -1 | cut -c1-200)"; fi
 }
@@ -70,7 +73,7 @@ check_protocol() {
   AMT=$(grant "$P" "$PROTO_TARGET" "$FB")
   if [ "$AMT" = "0" ]; then echo "$(date -u +%FT%TZ) PROTOCOL LOW: $P NEAR and $FUNDER has only $FB NEAR."; return 0; fi
   OUT=$(near contract call-function as-transaction "$ARENA" fund_protocol json-args '{}' prepaid-gas '30 Tgas' attached-deposit "$AMT NEAR" \
-    sign-as "$FUNDER" network-config testnet sign-with-keychain send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+    sign-as "$FUNDER" network-config testnet $SIGN send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
   TX=$(echo "$OUT" | grep -oE 'Transaction ID: [A-Za-z0-9]+' | head -1)
   if [ -n "$TX" ]; then echo "$(date -u +%FT%TZ) PROTOCOL was $P NEAR -> funded $AMT NEAR from $FUNDER (${TX#Transaction ID: })"; else echo "$(date -u +%FT%TZ) PROTOCOL top-up failed: $(echo "$OUT" | grep -iE 'error|panic' | head -1 | cut -c1-200)"; fi
 }
@@ -84,7 +87,7 @@ check_keeper() {
   FB=$(balance "$FUNDER" 2>/dev/null) || return 0
   AMT=$(grant "$B" "$KEEPER_TARGET" "$FB")
   [ "$AMT" = "0" ] && { echo "$(date -u +%FT%TZ) KEEPER LOW: $B NEAR and $FUNDER has only $FB NEAR."; return 0; }
-  OUT=$(near tokens "$FUNDER" send-near "$KEEPER" "$AMT NEAR" network-config testnet sign-with-keychain send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+  OUT=$(near tokens "$FUNDER" send-near "$KEEPER" "$AMT NEAR" network-config testnet $SIGN send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
   TX=$(echo "$OUT" | grep -oE 'Transaction ID: [A-Za-z0-9]+' | head -1)
   if [ -n "$TX" ]; then echo "$(date -u +%FT%TZ) KEEPER was $B NEAR -> sent $AMT NEAR from $FUNDER (${TX#Transaction ID: })"; else echo "$(date -u +%FT%TZ) KEEPER top-up failed: $(echo "$OUT" | grep -iE 'error|panic' | head -1 | cut -c1-200)"; fi
 }
@@ -107,7 +110,7 @@ while true; do
     if [ "$(jobs -rp | wc -l)" -lt "${NME_KEEPER_INFLIGHT:-3}" ]; then
       (
         OUT=$(near contract call-function as-transaction "$ARENA" tick json-args '{"max_tasks":8}' prepaid-gas '300 Tgas' attached-deposit '0 NEAR' \
-          sign-as "$KEEPER" network-config testnet sign-with-keychain send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+          sign-as "$KEEPER" network-config testnet $SIGN send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
         TX=$(echo "$OUT" | grep -oE 'Transaction ID: [A-Za-z0-9]+' | head -1)
         RES=$(echo "$OUT" | grep -oE '"processed":[0-9]+[^}]*' | head -1)
         if [ -n "$TX" ]; then echo "$(date -u +%FT%TZ) tick ${TX#Transaction ID: } ${RES:-} balance=${BAL}"; else echo "$(date -u +%FT%TZ) tick failed: $(echo "$OUT" | grep -iE 'error|panic' | head -1 | cut -c1-200)"; fi

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { parseTrade } from "./trade.js";
 import { DraftError } from "./draft.js";
@@ -6,7 +7,7 @@ import type { IconMaker } from "./nearai.js";
 
 const MAX_BODY = 64 * 1024;
 
-export interface Deps { llm: Llm; icon: IconMaker; chain: Chain; root: string; wrap: string; corsOrigin: string; perMin: number }
+export interface Deps { llm: Llm; icon: IconMaker; chain: Chain; root: string; wrap: string; corsOrigin: string; perMin: number; token?: string }
 
 function readBody(req: IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -31,20 +32,32 @@ function limiter(perMin: number, now: () => number) {
   };
 }
 
+/** Constant-time check of the shared secret between the site's server proxy and this service. */
+export function tokenOk(expected: string, got: unknown): boolean {
+  if (!expected) return true;
+  if (typeof got !== "string") return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(got);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export function makeServer(d: Deps, now: () => number = Date.now): Server {
   const allow = limiter(d.perMin, now);
   return createServer(async (req, res) => {
     const send = (status: number, body: object) => {
-      res.writeHead(status, { "content-type": "application/json", "access-control-allow-origin": d.corsOrigin, "access-control-allow-headers": "content-type" });
+      res.writeHead(status, { "content-type": "application/json", "access-control-allow-origin": d.corsOrigin, "access-control-allow-headers": "content-type, x-nme-token" });
       res.end(JSON.stringify(body));
     };
     try {
       if (req.method === "OPTIONS") return send(204, {});
       const url = req.url ?? "";
       if (req.method === "GET" && url === "/health") return send(200, { ok: true });
+      if (!tokenOk(d.token ?? "", req.headers["x-nme-token"])) return send(401, { error: "unauthorized" });
       if (req.method !== "POST") return send(404, { error: "not found" });
       if (!["/launch/parse", "/launch/icon", "/launch/preview", "/trade/parse"].includes(url)) return send(404, { error: "not found" });
-      if (!allow(req.socket.remoteAddress ?? "?")) return send(429, { error: "too many requests, wait a minute" });
+      // Behind the site's proxy (token set) the real client IP is in x-forwarded-for; only the proxy can reach us then.
+      const fwd = d.token ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "";
+      if (!allow(fwd || req.socket.remoteAddress || "?")) return send(429, { error: "too many requests, wait a minute" });
       const b = await readBody(req);
       if (url === "/launch/parse") return send(200, await parseLaunch(b?.text, d.llm));
       if (url === "/trade/parse") return send(200, await parseTrade(b?.text, d.llm));

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { Relayer, Reply } from "./relayer.js";
 import { BadRequest } from "./validate.js";
@@ -25,15 +26,25 @@ function readBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-export function makeServer(relayer: Relayer, opts: { corsOrigin: string; trustProxy: boolean }): Server {
+/** Constant-time check of the shared secret between the site's server proxy and this service. */
+export function tokenOk(expected: string, got: unknown): boolean {
+  if (!expected) return true;
+  if (typeof got !== "string") return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(got);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export function makeServer(relayer: Relayer, opts: { corsOrigin: string; trustProxy: boolean; token?: string }): Server {
   return createServer(async (req, res) => {
     const send = (r: Reply) => {
-      res.writeHead(r.status, { "content-type": "application/json", "access-control-allow-origin": opts.corsOrigin, "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET,POST,OPTIONS" });
+      res.writeHead(r.status, { "content-type": "application/json", "access-control-allow-origin": opts.corsOrigin, "access-control-allow-headers": "content-type, x-nme-token", "access-control-allow-methods": "GET,POST,OPTIONS" });
       res.end(JSON.stringify(r.body));
     };
     try {
       if (req.method === "OPTIONS") return send({ status: 204, body: {} });
       const url = new URL(req.url ?? "/", "http://x");
+      if (url.pathname !== "/health" && !tokenOk(opts.token ?? "", req.headers["x-nme-token"])) return send({ status: 401, body: { error: "unauthorized" } });
       const fwd = opts.trustProxy ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "";
       const ip = fwd || req.socket.remoteAddress || "unknown";
       if (req.method === "GET") {
