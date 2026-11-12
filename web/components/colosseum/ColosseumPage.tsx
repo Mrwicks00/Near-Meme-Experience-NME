@@ -166,7 +166,7 @@ export function ColosseumPage() {
         </section>
       )}
 
-      <div className="grid gap-8 px-4 py-14 sm:px-8 lg:grid-cols-[1fr_1.2fr]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-8 px-4 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] [&>*]:min-w-0">
         <section className="rounded-[1.8rem] border border-ink bg-paper p-6 shadow-[0_18px_40px_-22px_var(--color-drop)] sm:p-8">
           <p className="font-hand text-[2.2rem] leading-none">rules of war</p>
           <p className="mt-1 text-sm text-ink-2">Read live from the arena contract. Nobody can change them.</p>
@@ -176,7 +176,7 @@ export function ColosseumPage() {
               <li><strong>Every buy of 0.25 NEAR or more through NME is a hit</strong> for that coin. Buying elsewhere doesn&apos;t count.</li>
               <li><strong>The biggest war chests get paired.</strong> The stake is {war.chest_bps / 100}% of the smaller chest, and it must be at least {compact(near(war.min_stake))} NEAR.</li>
               <li><strong>One wallet&apos;s hits count up to {war.wallet_cap_bps / 100}% of the stake</strong>, and each side needs {war.min_unique} different wallets or the fight is called off.</li>
-              <li><strong>The loser&apos;s stake buys the winner and burns it.</strong> Supply goes down; nobody gets paid out.</li>
+              <li><strong>The loser&apos;s stake buys the winner.</strong> Half is burned (supply goes down), half is shared by the winning side&apos;s fighters as spoils.</li>
               <li><strong>Anyone can ring the bell.</strong> Settling and opening rounds is permissionless and pays a small bounty.</li>
             </ul>
           )}
@@ -184,7 +184,7 @@ export function ColosseumPage() {
 
         <section className="rounded-[1.8rem] border border-ink bg-blue-deep p-6 shadow-[0_18px_40px_-22px_var(--color-drop)] sm:p-8 lg:col-span-2">
           <p className="font-hand text-[2.2rem] leading-none">how a fight starts</p>
-          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] [&>*]:min-w-0">
             <ol className="space-y-3 text-[1.02rem] leading-relaxed">
               <li><strong>1. Get in line.</strong> Anyone can add NEAR to a coin&apos;s war chest on its coin page. You can&apos;t pick an opponent: the arena pairs the biggest chests, strongest against next strongest.</li>
               <li><strong>2. Ring the bell.</strong> Anyone with a NEAR wallet can poke the arena. It runs whatever is due, in order (settling the last round, opening the next one, price checks, fee claims), and the poker earns a small bounty. The Operator keeper does this on its own when it&apos;s running.</li>
@@ -198,9 +198,9 @@ export function ColosseumPage() {
                   const stake = partner && war ? Math.min(c.chestNear, partner.chestNear) * war.chest_bps / 10000 : 0;
                   const ok = !!war && stake >= near(war.min_stake) && i < (war.max_pairs ?? 2) * 2;
                   return (
-                    <li key={c.key} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                      <Link href={`/coin/${encodeURIComponent(c.key)}`} className="font-display text-xl hover:underline">${c.ticker}</Link>
-                      <span className="num text-sm">{compact(c.chestNear)} NEAR</span>
+                    <li key={c.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5">
+                      <Link href={`/coin/${encodeURIComponent(c.key)}`} className="min-w-0 break-all font-display text-xl hover:underline">${c.ticker}</Link>
+                      <span className="num whitespace-nowrap text-sm">{compact(c.chestNear)} NEAR</span>
                       <span className={`chip ${ok ? "bg-mint" : "bg-paper-2"}`}>{ok ? `fights $${partner!.ticker}` : "needs a bigger chest"}</span>
                     </li>
                   );
@@ -222,7 +222,7 @@ export function ColosseumPage() {
             {wars.map((f) => {
               const l = describe(f);
               return (
-                <li key={f.id} className="grid grid-cols-[auto_1fr] items-baseline gap-3 border-b border-ink/15 px-6 py-3">
+                <li key={f.id} className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3 border-b border-ink/15 px-6 py-3">
                   <span className={`chip ${TONE_BG[l.tone]}`}>{l.tag}</span>
                   <span className="text-[0.95rem] leading-snug">{l.text} <span className="text-xs text-ink-2">· {ago(f.ts_ms, now)}</span></span>
                 </li>
