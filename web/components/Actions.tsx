@@ -1,4 +1,5 @@
 "use client";
+import { playAccount, playCall, playSignOut } from "@/lib/play";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { NearProvider, useNearWallet } from "near-connect-hooks";
 import { NME } from "@/lib/config";
@@ -24,14 +25,18 @@ const X_KEY = "nme.xwallet";
 type Toast = { tone: "ok" | "err" | "info"; text: string; href?: string };
 type NearCall = { contractId: string; method: string; args: Record<string, unknown>; tgas: number; deposit?: string };
 type Ctx = {
-  account: string;            // connected NEAR account, "" if none
+  account: string;            // the NEAR account that signs (a NEAR wallet, else a Google sign-in account), "" if none
+  nearWallet: string;         // the connected NEAR wallet only (near-connect), "" if none
   x: XWallet | null;          // connected Phantom / MetaMask wallet
   xNear: number | null;       // that wallet's NEAR balance inside the gateway
   refreshX: () => void;
   connect: () => void;        // opens the wallet chooser
   connectNear: () => void;
   connectX: (k: XKind, evm?: EvmChoice) => Promise<void>;
-  disconnect: (which: "near" | "x") => void;
+  disconnect: (which: "near" | "x" | "play") => void;
+  /** A Google sign-in account (`<name>.nmeplay.testnet`) whose key lives in this browser, or null. */
+  play: string | null;
+  setPlay: (account: string | null) => void;
   buy: (coin: Coin, amountNear?: number) => void;
   poke: () => void;
   toast: (t: Toast) => void;
@@ -82,6 +87,11 @@ function Inner({ children }: { children: React.ReactNode }) {
   const [x, setX] = useState<XWallet | null>(null);
   const [xNear, setXNear] = useState<number | null>(null);
   const [xTick, setXTick] = useState(0);
+  const [play, setPlayState] = useState<string | null>(null);
+  useEffect(() => { const t = setTimeout(() => setPlayState(playAccount()), 0); return () => clearTimeout(t); }, []);
+  const setPlay = useCallback((a: string | null) => { if (!a) playSignOut(); setPlayState(a); }, []);
+  // A NEAR wallet wins when both are present; otherwise the Google account signs.
+  const account = signedAccountId || play || "";
 
   useEffect(() => { const t = setTimeout(() => setX(loadX()), 0); return () => clearTimeout(t); }, []);
   useEffect(() => {
@@ -113,12 +123,25 @@ function Inner({ children }: { children: React.ReactNode }) {
       toast({ tone: "err", text: errText(e) });
     }
   }, [toast]);
-  const disconnect = useCallback((which: "near" | "x") => {
+  const disconnect = useCallback((which: "near" | "x" | "play") => {
     if (which === "near") signOut().catch(() => {});
+    else if (which === "play") setPlay(null);
     else { setX(null); saveX(null); setXNear(null); }
-  }, [signOut]);
+  }, [signOut, setPlay]);
 
   const call = useCallback<Ctx["call"]>(async ({ contractId, method, args, tgas, deposit = "0", ok }) => {
+    if (!signedAccountId && play) {
+      // Google sign-in account: signed right here with this device's key. One tap, no popup.
+      try {
+        const h = await playCall({ contractId, method, args, tgas, deposit });
+        toast({ tone: "ok", text: ok, href: h ? `${NME.explorer}/txns/${h}` : undefined });
+        announceChange();
+        return true;
+      } catch (e) {
+        toast({ tone: "err", text: errText(e) });
+        return false;
+      }
+    }
     if (!signedAccountId) { setChooser(true); return false; }
     try {
       const out = await callFunction({ contractId, method, args, gas: TGAS(tgas), deposit });
@@ -130,11 +153,11 @@ function Inner({ children }: { children: React.ReactNode }) {
       toast({ tone: "err", text: errText(e) });
       return false;
     }
-  }, [signedAccountId, callFunction, toast]);
+  }, [signedAccountId, play, callFunction, toast]);
 
   const xBusy = useRef(false);
   const act = useCallback<Ctx["act"]>(async ({ near: n, x: xa, ok }) => {
-    if (signedAccountId && n) return call({ ...n, ok });
+    if ((signedAccountId || play) && n) return call({ ...n, ok });
     if (x && xa) {
       // One signed action at a time: a second click would sign the same nonce again and be refused on chain.
       if (xBusy.current) { toast({ tone: "info", text: "Your last action is still going through. Wait for it to finish." }); return false; }
@@ -156,17 +179,17 @@ function Inner({ children }: { children: React.ReactNode }) {
     if (x && !xa) { toast({ tone: "info", text: "This one needs a NEAR wallet. Phantom and EVM wallets can't sign it yet." }); return false; }
     setChooser(true);
     return false;
-  }, [signedAccountId, x, call, toast]);
+  }, [signedAccountId, play, x, call, toast]);
 
   const poke = useCallback(() => {
     act({ near: { contractId: NME.arena, method: "tick", args: { max_tasks: 8 }, tgas: 300 }, ok: "Poked. The arena ran its due tasks." });
   }, [act]);
 
   const value = useMemo<Ctx>(() => ({
-    account: signedAccountId, x, xNear, refreshX: () => setXTick((v) => v + 1),
+    account, nearWallet: signedAccountId ?? "", play, setPlay, x, xNear, refreshX: () => setXTick((v) => v + 1),
     connect: () => setChooser(true), connectNear, connectX, disconnect,
     buy: (coin, amountNear) => { setSheetAmount(amountNear); setSheet(coin); }, poke, toast, call, act,
-  }), [signedAccountId, x, xNear, connectNear, connectX, disconnect, poke, toast, call, act]);
+  }), [account, signedAccountId, play, setPlay, x, xNear, connectNear, connectX, disconnect, poke, toast, call, act]);
 
   return (
     <ActionsCtx.Provider value={value}>

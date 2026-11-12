@@ -1,4 +1,6 @@
 "use client";
+import { NME } from "@/lib/config";
+import { GoogleSignIn } from "./GoogleSignIn";
 import { useEffect, useState } from "react";
 import { compact, near } from "@/lib/format";
 import { Claim, EvmChoice, XWallet, claimDeposit, depositAddress, evmWallets, gatewayLimits, getClaim, sendEth, sendSol, solDeposits, waitEthFinal } from "@/lib/xwallet";
@@ -161,7 +163,7 @@ function TopUp({ x }: { x: XWallet }) {
 }
 
 export function WalletSheet({ onClose }: { onClose: () => void }) {
-  const { account, x, xNear, connectNear, connectX, disconnect } = useActions();
+  const { nearWallet: account, x, xNear, connectNear, connectX, disconnect } = useActions();
   const [evm, setEvm] = useState<EvmChoice[] | null>(null);
   const listEvm = () => { evmWallets().then(setEvm); };
   useEffect(() => {
@@ -178,8 +180,18 @@ export function WalletSheet({ onClose }: { onClose: () => void }) {
           <button className="chip bg-paper" onClick={onClose}>Close</button>
         </div>
 
-        <section className="mt-6 rounded-[1.4rem] border border-ink bg-mint-deep p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide">NEAR account</p>
+        {NME.googleClientId && (
+          <section className="mt-6 rounded-[1.4rem] border-2 border-ink bg-yolk p-5 text-ink">
+            <p className="text-xs font-semibold uppercase tracking-wide">Easiest · no wallet needed</p>
+            <p className="mt-1 text-sm">Sign in with Google and get your own NEAR account with free test NEAR. Every action is one tap: no wallet app, no popups. Works on any phone.</p>
+            <div className="mt-3">
+              <GoogleSignIn onDone={onClose} />
+            </div>
+          </section>
+        )}
+
+        <section className="mt-4 rounded-[1.4rem] border border-ink bg-mint-deep p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide">NEAR wallet</p>
           {account ? (
             <div className="mt-2 flex items-center justify-between gap-3">
               <p className="truncate font-semibold">{account}</p>

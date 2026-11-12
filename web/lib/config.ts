@@ -18,6 +18,8 @@ export const NME = {
   intentUrl: env("NEXT_PUBLIC_INTENT_URL", "/api/svc/intent"),
   relayerUrl: env("NEXT_PUBLIC_RELAYER_URL", "/api/svc/relayer"),
   explorer: "https://testnet.nearblocks.io",
+  // "Sign in with Google" (web client id, public). Empty = the Google option is hidden.
+  googleClientId: env("NEXT_PUBLIC_GOOGLE_CLIENT_ID", ""),
   // NEAR Social's data contract (SocialDB) and a testnet front end for reading posts.
   social: env("NEXT_PUBLIC_SOCIAL", "v1.social08.testnet"),
   socialUi: "https://test.near.social",

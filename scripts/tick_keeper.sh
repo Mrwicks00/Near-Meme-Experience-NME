@@ -29,6 +29,9 @@ PROTO_MIN="${NME_PROTO_MIN:-0.3}"
 PROTO_TARGET="${NME_PROTO_TARGET:-1}"
 KEEPER_REFILL="${NME_KEEPER_REFILL:-0.6}"
 KEEPER_TARGET="${NME_KEEPER_TARGET:-2}"
+PLAY_PARENT="${NME_PLAY_PARENT:-nmeplay.testnet}"   # pays new Google sign-in accounts their starter NEAR
+PLAY_REFILL="${NME_PLAY_REFILL:-3}"
+PLAY_TARGET="${NME_PLAY_TARGET:-15}"
 RESERVE_EVERY="${NME_RESERVE_EVERY:-10}"   # loops between reserve checks (10 x 15 s = 2.5 min)
 export NEAR_RPC="${NEAR_RPC:-https://test.rpc.fastnear.com}"
 
@@ -78,6 +81,20 @@ check_protocol() {
   if [ -n "$TX" ]; then echo "$(date -u +%FT%TZ) PROTOCOL was $P NEAR -> funded $AMT NEAR from $FUNDER (${TX#Transaction ID: })"; else echo "$(date -u +%FT%TZ) PROTOCOL top-up failed: $(echo "$OUT" | grep -iE 'error|panic' | head -1 | cut -c1-200)"; fi
 }
 
+# The Google sign-in parent account (creates player accounts and pays their starter NEAR).
+check_play() {
+  local B FB AMT OUT TX
+  [ "$FUNDER" = "none" ] && return 0
+  B=$(balance "$PLAY_PARENT" 2>/dev/null) || return 0
+  python3 -c "import sys; sys.exit(0 if float('$B') < float('$PLAY_REFILL') else 1)" || return 0
+  FB=$(balance "$FUNDER" 2>/dev/null) || return 0
+  AMT=$(grant "$B" "$PLAY_TARGET" "$FB")
+  [ "$AMT" = "0" ] && { echo "$(date -u +%FT%TZ) PLAY LOW: $B NEAR and $FUNDER has only $FB NEAR."; return 0; }
+  OUT=$(near tokens "$FUNDER" send-near "$PLAY_PARENT" "$AMT NEAR" network-config testnet $SIGN send 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+  TX=$(echo "$OUT" | grep -oE 'Transaction ID: [A-Za-z0-9]+' | head -1)
+  if [ -n "$TX" ]; then echo "$(date -u +%FT%TZ) PLAY was $B NEAR -> sent $AMT NEAR from $FUNDER (${TX#Transaction ID: })"; else echo "$(date -u +%FT%TZ) PLAY top-up failed"; fi
+}
+
 # The keeper's own gas wallet.
 check_keeper() {
   local B FB AMT OUT TX
@@ -95,7 +112,7 @@ check_keeper() {
 echo "$(date -u +%FT%TZ) keeper up: signer=$KEEPER arena=$ARENA every ${INTERVAL}s, stops below ${MIN} NEAR; reserve floor ${RES_MIN} NEAR, protocol floor ${PROTO_MIN} NEAR, keeper refill below ${KEEPER_REFILL} NEAR, funder ${FUNDER}"
 LOOP=0
 while true; do
-  if [ $((LOOP % RESERVE_EVERY)) -eq 0 ]; then check_reserve; check_protocol; check_keeper; fi
+  if [ $((LOOP % RESERVE_EVERY)) -eq 0 ]; then check_reserve; check_protocol; check_keeper; check_play; fi
   LOOP=$((LOOP + 1))
   NEXT=$(python3 scripts/lib/nview.py "$ARENA" next_due_ms 2>/dev/null || echo "err")
   NOW=$(( $(date +%s) * 1000 ))

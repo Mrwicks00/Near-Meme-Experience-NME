@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
+import type { Play } from "./play.js";
 import type { Relayer, Reply } from "./relayer.js";
 import { BadRequest } from "./validate.js";
 
@@ -35,7 +36,7 @@ export function tokenOk(expected: string, got: unknown): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function makeServer(relayer: Relayer, opts: { corsOrigin: string; trustProxy: boolean; token?: string }): Server {
+export function makeServer(relayer: Relayer, opts: { corsOrigin: string; trustProxy: boolean; token?: string }, play?: Play): Server {
   return createServer(async (req, res) => {
     const send = (r: Reply) => {
       res.writeHead(r.status, { "content-type": "application/json", "access-control-allow-origin": opts.corsOrigin, "access-control-allow-headers": "content-type, x-nme-token", "access-control-allow-methods": "GET,POST,OPTIONS" });
@@ -54,6 +55,10 @@ export function makeServer(relayer: Relayer, opts: { corsOrigin: string; trustPr
         if (m) return send(await relayer.wallet(decodeURIComponent(m[1]!), url.searchParams.get("token") ?? undefined));
       } else if (req.method === "POST") {
         const body = await readBody(req);
+        if (url.pathname === "/play/session") {
+          if (!play) return send({ status: 503, body: { error: "Google sign-in is not enabled on this relayer" } });
+          return send(await play.session(body, ip));
+        }
         if (url.pathname === "/action") return send(await relayer.action(body, ip));
         if (url.pathname === "/claim") return send(await relayer.claim(body, ip));
         if (url.pathname === "/claim_deposit") return send(await relayer.claimDeposit(body, ip));
