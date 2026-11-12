@@ -1,13 +1,12 @@
 "use client";
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Edges, Html, OrbitControls } from "@react-three/drei";
+import { Edges, Environment, Html, OrbitControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 
 const INK = "#171717";
 const PAPER = "#ece8e1";
 const NIGHT = "#0c0a10";
-const STONE = "#8c7d72";
 const STONE2 = "#6f6259";
 const SAND = "#c49a4c";
 const RED = "#f2735f";
@@ -46,8 +45,29 @@ function placeLimb(m: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3) {
 
 // ---------------------------------------------------------------- stadium
 
+/** Real (CC0, Poly Haven) travertine and sand, tiled. `repeat` sets how many times the 1K texture repeats. */
+function useSurface(name: "stone" | "sand", repeat: [number, number]) {
+  const t = useTexture({ map: `/arena/${name}_diff.jpg`, normalMap: `/arena/${name}_nor.jpg`, roughnessMap: `/arena/${name}_rough.jpg` });
+  return useMemo(() => {
+    const out: Record<string, THREE.Texture> = {};
+    for (const [k, tex] of Object.entries(t)) {
+      const c = tex.clone();
+      c.wrapS = c.wrapT = THREE.RepeatWrapping;
+      c.repeat.set(repeat[0], repeat[1]);
+      c.anisotropy = 4;
+      if (k === "map") c.colorSpace = THREE.SRGBColorSpace;
+      c.needsUpdate = true;
+      out[k] = c;
+    }
+    return out as { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture };
+  }, [t, repeat]);
+}
+
 /** Stepped stone bowl: the seating tiers, then the arcade on top. */
 function Stadium() {
+  const bowl = useSurface("stone", useMemo(() => [24, 3], []));
+  const pier = useSurface("stone", useMemo(() => [0.6, 1.4], []));
+  const sand = useSurface("sand", useMemo(() => [5, 5], []));
   const lathe = useMemo(() => {
     const pts: THREE.Vector2[] = [new THREE.Vector2(8.4, 0), new THREE.Vector2(8.4, 0.9)];
     for (let i = 0; i < 8; i++) {
@@ -68,33 +88,31 @@ function Stadium() {
   }, []);
   return (
     <group>
-      <mesh geometry={lathe}>
-        <meshToonMaterial color={STONE} side={THREE.DoubleSide} />
+      <mesh geometry={lathe} receiveShadow>
+        <meshStandardMaterial {...bowl} color="#d9cbb4" side={THREE.DoubleSide} />
       </mesh>
       {/* the arena wall the fighters stand inside */}
       <mesh position={[0, 0.45, 0]}>
         <cylinderGeometry args={[8.33, 8.33, 0.9, 96, 1, true]} />
-        <meshToonMaterial color={RED2} side={THREE.DoubleSide} />
+        <meshStandardMaterial {...pier} color="#b98a6e" side={THREE.DoubleSide} />
       </mesh>
       {arches.map((p, i) => (
         <group key={i} position={p.pos} rotation={[0, p.rot, 0]}>
           {[-1, 1].map((x) => (
-            <mesh key={x} position={[x, 0, 0]}>
+            <mesh key={x} position={[x, 0, 0]} castShadow>
               <boxGeometry args={[0.5, 2.6, 0.7]} />
-              <meshToonMaterial color={STONE2} />
-              <Edges color={INK} />
+              <meshStandardMaterial {...pier} color="#cdbca3" />
             </mesh>
           ))}
-          <mesh position={[0, 1.45, 0]}>
+          <mesh position={[0, 1.45, 0]} castShadow>
             <boxGeometry args={[2.55, 0.4, 0.7]} />
-            <meshToonMaterial color={STONE} />
-            <Edges color={INK} />
+            <meshStandardMaterial {...pier} color="#d9cbb4" />
           </mesh>
         </group>
       ))}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <circleGeometry args={[8.4, 96]} />
-        <meshToonMaterial color={SAND} />
+        <meshStandardMaterial {...sand} color="#e8cf9e" />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
         <ringGeometry args={[4.6, 4.8, 96]} />
@@ -361,20 +379,27 @@ export default function Arena3D({ a, b, hits, outcome, practice }: { a: Fighter;
     else Object.assign(shared.current, { loser: null, voidAt: now() });
   }, [outcome]);
 
+  // Phones: no shadow maps (the sky and the textures carry the look).
+  const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+
   // A new pair of fighters starts fresh.
   useEffect(() => {
     Object.assign(shared.current, { loser: null, koAt: -1e9, voidAt: -1e9 });
   }, [a.ticker, b.ticker]);
 
   return (
-    <Canvas dpr={[1, 1.75]} camera={{ position: [0, 5.4, 12.2], fov: 40 }}>
+    <Canvas dpr={[1, 1.75]} shadows={mobile ? false : { type: THREE.PCFShadowMap }} camera={{ position: [0, 5.4, 12.2], fov: 40 }} gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}>
       <color attach="background" args={[NIGHT]} />
-      <fog attach="fog" args={[NIGHT, 30, 52]} />
-      <hemisphereLight args={["#ffe7c9", "#2a2030", 1.05]} />
-      {/* night match: warm floodlights on the sand */}
-      <pointLight position={[0, 14, 0]} intensity={140} distance={40} color="#ffd9a0" />
-      <directionalLight position={[6, 12, 8]} intensity={1.5} />
-      <Stadium />
+      <fog attach="fog" args={["#e2b98c", 40, 80]} />
+      {/* golden hour: a real sky panorama lights the stone (CC0, Poly Haven), the low sun throws long shadows */}
+      <Suspense fallback={null}>
+        <Environment files="/arena/sky_1k.hdr" background backgroundBlurriness={0.04} environmentIntensity={0.9} />
+      </Suspense>
+      <directionalLight position={[-14, 11, 6]} intensity={2.4} color="#ffd2a1" castShadow={!mobile} shadow-mapSize={[1024, 1024]} shadow-camera-left={-12} shadow-camera-right={12} shadow-camera-top={12} shadow-camera-bottom={-12} />
+      <hemisphereLight args={["#ffe9cf", "#5a4636", 0.35]} />
+      <Suspense fallback={null}>
+        <Stadium />
+      </Suspense>
       <Crowd shared={shared} />
       <Brawler side="a" fighter={a} shared={shared} />
       <Brawler side="b" fighter={b} shared={shared} />
