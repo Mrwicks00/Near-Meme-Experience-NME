@@ -205,7 +205,11 @@ body {
     filter 0.15s,
     box-shadow 0.15s;
   cursor: pointer;
-  white-space: nowrap;
+  /* Short labels stay on one line; a long one wraps instead of pushing past a phone's edge. */
+  max-width: 100%;
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .btn:hover {
   transform: translateY(-1px);

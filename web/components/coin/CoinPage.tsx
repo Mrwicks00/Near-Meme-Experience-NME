@@ -332,14 +332,14 @@ export function CoinPage({ coinKey }: { coinKey: string }) {
         <TradeBox defaultTicker={coin.key} />
       </section>
 
-      <div className="grid gap-8 px-4 py-12 sm:px-8 lg:grid-cols-2">
-        <div className="space-y-8">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-8 px-4 py-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-8">
           <Trade coin={coin} balanceRaw={balance} />
           <Chest coin={coin} />
           {coin.native && <Hire coin={coin} deliveries={(deliveries ?? []).filter((d) => d.ticker === coinKey)} />}
           {coin.priceNear !== null && <Raid coin={coin} memes={(deliveries ?? []).filter((d) => d.ticker === coinKey)} />}
         </div>
-        <div className="space-y-8">
+        <div className="min-w-0 space-y-8">
           {coin.native && <Defense coin={coin} cfg={dcfg} st={dst} />}
           {coin.native && <PumpBag coin={coin} crown={crown} xOwner={xOwner} />}
           <Rules coin={coin} />

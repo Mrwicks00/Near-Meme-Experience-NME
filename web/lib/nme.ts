@@ -48,7 +48,9 @@ const lastGood = new Map<string, Coin>();
  * One coin, read fresh. A failed read THROWS (it never degrades to "not an NME coin" or a missing price): pollers keep the
  * last good copy instead of flickering cards away while the public RPC rate-limits. `null` only when the coin really is unknown.
  */
-export async function loadCoin(key: string, rec?: CoinRecord, lenient = false): Promise<Coin | null> {
+export async function loadCoin(keyIn: string, rec?: CoinRecord, lenient = false): Promise<Coin | null> {
+  // `/coin/toad.nme.testnet` (the account) means the NME coin `toad`.
+  const key = keyIn.endsWith(`.${NME.factory}`) ? keyIn.slice(0, -(NME.factory.length + 1)) : keyIn;
   // `lenient`: a failed read gives a partial card instead of an error (the home grid's first load must show every coin).
   const v = <T,>(c: string, m: string, a: object = {}) => (lenient ? safe(view<T>(c, m, a)) : view<T>(c, m, a)) as Promise<T>;
   const entry = await v<CoinEntry | null>(NME.arena, "get_coin", { key });
