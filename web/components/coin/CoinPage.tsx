@@ -337,7 +337,13 @@ export function CoinPage({ coinKey }: { coinKey: string }) {
           <Trade coin={coin} balanceRaw={balance} />
           <Chest coin={coin} />
           {coin.native && <Hire coin={coin} deliveries={(deliveries ?? []).filter((d) => d.ticker === coinKey)} />}
-          {coin.priceNear !== null && <Raid coin={coin} memes={(deliveries ?? []).filter((d) => d.ticker === coinKey)} />}
+          {coin.priceNear !== null && (
+            <Raid
+              coin={coin}
+              memes={(deliveries ?? []).filter((d) => d.ticker === coinKey)}
+              raiders={mine.filter((f) => f.kind === "raid_claimed").map((f) => ({ raid: Number(/raid=(\d+)/.exec(f.extra)?.[1] ?? 0), account: f.actor }))}
+            />
+          )}
         </div>
         <div className="min-w-0 space-y-8">
           {coin.native && <Defense coin={coin} cfg={dcfg} st={dst} />}

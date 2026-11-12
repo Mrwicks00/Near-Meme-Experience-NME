@@ -5,7 +5,7 @@ import { useState } from "react";
 import { NME } from "@/lib/config";
 import { compact, near } from "@/lib/format";
 import { useNow, usePolled } from "@/lib/hooks";
-import { Coin, Delivery, Raid as RaidT, loadLatestRaid, loadRaidClaim, loadRaidRules } from "@/lib/nme";
+import { Coin, Delivery, Raid as RaidT, loadLatestRaid, loadRaidClaim, loadRaidRules, loadSocialPosts } from "@/lib/nme";
 import { useActions } from "../Actions";
 
 const START = "20000000000000000000000"; // 0.02 NEAR, the raid record's storage
@@ -18,7 +18,43 @@ function left(ms: number) {
   return m >= 1 ? `${m} min` : `${Math.ceil(ms / 1000)} s`;
 }
 
-export function Raid({ coin, memes }: { coin: Coin; memes: Delivery[] }) {
+// Pictures shown only from our own FastFS uploads (the coin's AI memes); any other link is listed, not displayed.
+const SAFE_IMG = /^https:\/\/test\.fastfs\.io\//;
+
+/** Counted raid posts (from the feed) plus the visitor's own post, read from NEAR Social. */
+function RaidWall({ raid, raiders, me }: { raid: RaidT; raiders: string[]; me: string }) {
+  const who = Array.from(new Set([...raiders, ...(me ? [me] : [])])).slice(0, 30);
+  const posts = usePolled(who.length ? () => loadSocialPosts(who) : null, 15000, [who.join(","), raid.id]).data ?? {};
+  const tag = `#${raid.tag}`.toLowerCase();
+  const rows = who
+    .map((a) => ({ a, p: posts[a], counted: raiders.includes(a) }))
+    .filter((r) => r.p && (r.counted || r.p.text.toLowerCase().includes(tag)));
+  if (!rows.length) return null;
+  return (
+    <div className="rounded-2xl border border-ink bg-paper p-4">
+      <p className="text-sm font-semibold">Raid wall · #{raid.tag}</p>
+      <p className="mt-1 text-xs">Read live from NEAR Social (SocialDB). The old near.social site no longer shows feeds, so the posts are shown here.</p>
+      <ul className="mt-3 space-y-3">
+        {rows.map(({ a, p, counted }) => (
+          <li key={a} className="rounded-xl border border-ink/40 p-3">
+            <p className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
+              <span className="break-all">@{a}</span>
+              <span className={`chip ${counted ? "bg-lime text-ink" : "bg-yolk text-ink"}`}>{counted ? "counted" : "not claimed yet"}</span>
+            </p>
+            {p!.image && SAFE_IMG.test(p!.image) && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={p!.image} alt={`Raid picture posted by ${a}`} className="mt-2 w-full rounded-lg border border-ink/40" />
+            )}
+            <p className="mt-2 whitespace-pre-wrap break-words text-sm">{p!.text}</p>
+            {p!.image && !SAFE_IMG.test(p!.image) && <p className="mt-1 text-xs break-all">picture: {p!.image}</p>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function Raid({ coin, memes, raiders }: { coin: Coin; memes: Delivery[]; raiders: { raid: number; account: string }[] }) {
   const { account, x, call, connect } = useActions();
   const now = useNow(5000);
   const raidQ = usePolled(() => loadLatestRaid(coin.key), 10000, [coin.key]);
@@ -129,6 +165,11 @@ export function Raid({ coin, memes }: { coin: Coin; memes: Delivery[] }) {
             </div>
           )}
           {!account && !x && <button className="btn w-full bg-night text-cream" onClick={connect}>Connect a NEAR wallet to raid</button>}
+        </div>
+      )}
+      {raid && (
+        <div className="mt-4">
+          <RaidWall raid={raid} raiders={raiders.filter((r) => r.raid === raid.id).map((r) => r.account)} me={account} />
         </div>
       )}
     </section>

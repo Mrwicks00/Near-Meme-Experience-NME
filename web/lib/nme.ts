@@ -218,6 +218,26 @@ export type RaidRules = { blocks: number; grace_blocks: number; cooldown_ms: num
 export const loadLatestRaid = (ticker: string) => view<Raid | null>(NME.arena, "latest_raid", { ticker });
 export const loadRaidRules = () => view<RaidRules>(NME.arena, "raid_rules");
 export const loadRaidClaim = (raidId: number, account: string) => view<boolean | null>(NME.arena, "raid_claim_of", { raid_id: raidId, account });
+export type SocialPost = { text: string; image?: string; block: number };
+/** Latest NEAR Social post of each account, straight from SocialDB (one `get`). */
+export async function loadSocialPosts(accounts: string[]): Promise<Record<string, SocialPost>> {
+  if (!accounts.length) return {};
+  const raw = await view<Record<string, { post?: { main?: { ":block"?: number; ""?: string } } }>>(NME.social, "get", { keys: accounts.map((a) => `${a}/post/main`), options: { with_block_height: true } });
+  const out: Record<string, SocialPost> = {};
+  for (const a of accounts) {
+    const m = raw?.[a]?.post?.main;
+    if (!m || typeof m[""] !== "string") continue;
+    try {
+      const p = JSON.parse(m[""]) as { text?: unknown; image?: { url?: unknown } };
+      if (typeof p.text !== "string") continue;
+      out[a] = { text: p.text.slice(0, 1000), image: typeof p.image?.url === "string" ? p.image.url : undefined, block: m[":block"] ?? 0 };
+    } catch {
+      // not a post we can read
+    }
+  }
+  return out;
+}
+
 export const loadSocialStorage = (account: string) => view<{ total: string; available: string } | null>(NME.social, "storage_balance_of", { account_id: account });
 
 export const loadDeliveries = (limit = 32) => view<Delivery[]>(NME.arena, "get_deliveries", { limit });
