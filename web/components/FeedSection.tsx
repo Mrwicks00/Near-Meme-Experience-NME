@@ -1,4 +1,5 @@
 "use client";
+import { ProofBadge } from "./ProofBadge";
 import { Commentary, FeedItem, Tone, describe, prettyText } from "@/lib/nme";
 import { ago } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
@@ -63,6 +64,7 @@ export function FeedSection({ items, fresh, commentary, error }: { items: FeedIt
                 </p>
                 <p className="font-serif text-[1.15rem] leading-snug">{prettyText(c.text)}</p>
                 <p className="mt-2 text-[0.7rem] text-ink-2">Written by {c.model.split("/").pop()} · posted on chain</p>
+                <ProofBadge chatId={c.chat_id} model={c.model} commentarySeq={c.seq} />
               </li>
             ))}
             {!commentary.length && <li className="text-ink-2">The brains are quiet. They talk when a war starts or ends.</li>}

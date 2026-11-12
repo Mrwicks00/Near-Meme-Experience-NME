@@ -220,7 +220,10 @@ fn job(mut job: Job) {
         fail("NEAR_AI_API_KEY is empty");
     }
     let model = job.model.clone().unwrap_or_else(|| DEFAULT_MODEL.to_string());
-    let (status, body) = match http::post_json(&format!("{NEAR_AI_BASE}/chat/completions"), &key, &chat_request(&job)) {
+    // Proof of Thought: NEAR AI's model TEE signs sha256(request bytes) and sha256(response bytes); we return the same two
+    // hashes so anyone can match a delivery to that signature (GET /v1/signature/{chat_id}).
+    let request = chat_request(&job);
+    let (status, body) = match http::post_json(&format!("{NEAR_AI_BASE}/chat/completions"), &key, &request) {
         Ok(r) => r,
         Err(e) => fail(&e),
     };
@@ -256,6 +259,8 @@ fn job(mut job: Job) {
         completion_tokens: v["usage"]["completion_tokens"].as_u64().unwrap_or(0),
         media_url,
         media_hash,
+        request_hash: chain::sha256_hex(request.as_bytes()),
+        response_hash: chain::sha256_hex(&body),
     };
     println!("{}", serde_json::to_string(&out).unwrap_or_else(|_| "{\"ok\":false,\"error\":\"serialize\"}".into()));
 }
@@ -267,7 +272,8 @@ fn defense(mut d: Defense) {
         vibe = coin_vibe(&rpc, &coin).unwrap_or_default();
     }
     let model = d.model.clone().unwrap_or_else(|| DEFAULT_MODEL.to_string());
-    let (status, body) = match http::post_json(&format!("{NEAR_AI_BASE}/chat/completions"), &key, &defense_request(&d, &vibe)) {
+    let request = defense_request(&d, &vibe);
+    let (status, body) = match http::post_json(&format!("{NEAR_AI_BASE}/chat/completions"), &key, &request) {
         Ok(r) => r,
         Err(e) => fail(&e),
     };
@@ -289,6 +295,8 @@ fn defense(mut d: Defense) {
         drop_pct_x100: drop_pct_x100(d.current_point, d.high_point),
         model: v["model"].as_str().unwrap_or(&model).to_string(),
         chat_id: v["id"].as_str().unwrap_or("").to_string(),
+        request_hash: chain::sha256_hex(request.as_bytes()),
+        response_hash: chain::sha256_hex(&body),
     };
     println!("{}", serde_json::to_string(&out).unwrap_or_else(|_| "{\"ok\":false,\"error\":\"serialize\"}".into()));
 }

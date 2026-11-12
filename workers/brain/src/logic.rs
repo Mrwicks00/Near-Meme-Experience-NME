@@ -55,6 +55,8 @@ pub struct DefenseOutput {
     pub drop_pct_x100: i64,
     pub model: String,
     pub chat_id: String,
+    pub request_hash: String,
+    pub response_hash: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -114,6 +116,9 @@ pub struct JobOutput {
     /// `meme` jobs: where the picture is (FastFS) and its sha256; empty for text jobs.
     pub media_url: String,
     pub media_hash: String,
+    /// Proof of Thought: sha256 hex of the exact request and response bytes, as signed by the model's TEE.
+    pub request_hash: String,
+    pub response_hash: String,
 }
 
 /// What we ask the model to return.

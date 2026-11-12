@@ -7,7 +7,7 @@ import type { IconMaker } from "./nearai.js";
 
 const MAX_BODY = 64 * 1024;
 
-export interface Deps { llm: Llm; icon: IconMaker; chain: Chain; root: string; wrap: string; corsOrigin: string; perMin: number; token?: string }
+export interface Deps { llm: Llm; icon: IconMaker; chain: Chain; root: string; wrap: string; corsOrigin: string; perMin: number; token?: string; proof?: (chatId: string, model: string) => Promise<object> }
 
 function readBody(req: IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -53,6 +53,19 @@ export function makeServer(d: Deps, now: () => number = Date.now): Server {
       const url = req.url ?? "";
       if (req.method === "GET" && url === "/health") return send(200, { ok: true });
       if (!tokenOk(d.token ?? "", req.headers["x-nme-token"])) return send(401, { error: "unauthorized" });
+      if (req.method === "GET" && url.startsWith("/proof/") && d.proof) {
+        const u = new URL(url, "http://x");
+        const chatId = decodeURIComponent(u.pathname.slice("/proof/".length));
+        const model = u.searchParams.get("model") ?? "";
+        if (!/^[A-Za-z0-9_-]{8,80}$/.test(chatId) || !/^[A-Za-z0-9._\/-]{3,80}$/.test(model)) return send(400, { error: "bad chat id or model" });
+        const fwdP = d.token ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "";
+        if (!allow(fwdP || req.socket.remoteAddress || "?")) return send(429, { error: "too many requests, wait a minute" });
+        try {
+          return send(200, await d.proof(chatId, model));
+        } catch (e) {
+          return send(502, { error: String((e as Error).message ?? e).slice(0, 200) });
+        }
+      }
       if (req.method !== "POST") return send(404, { error: "not found" });
       if (!["/launch/parse", "/launch/icon", "/launch/preview", "/trade/parse"].includes(url)) return send(404, { error: "not found" });
       // Behind the site's proxy (token set) the real client IP is in x-forwarded-for; only the proxy can reach us then.

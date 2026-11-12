@@ -1,4 +1,5 @@
 "use client";
+import { Spoils } from "./Spoils";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -212,6 +213,8 @@ export function ColosseumPage() {
             </div>
           </div>
         </section>
+
+        <Spoils feed={feed.items} />
 
         <section className="overflow-hidden rounded-[1.8rem] border border-ink bg-paper shadow-[0_18px_40px_-22px_var(--color-drop)]">
           <h2 className="border-b border-ink bg-red-deep px-6 py-4 font-black text-4xl text-red">War record</h2>

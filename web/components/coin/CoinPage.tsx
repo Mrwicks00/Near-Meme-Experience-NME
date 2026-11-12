@@ -15,6 +15,7 @@ import { useActions, yocto } from "../Actions";
 import { crownOwnerOf, walletTokens } from "@/lib/xwallet";
 import { TradeBox } from "../TradeBox";
 import { Raid } from "./Raid";
+import { ProofBadge } from "../ProofBadge";
 import { walletName } from "@/lib/xwallet";
 
 const ONE_YOCTO = "1";
@@ -175,6 +176,7 @@ export function Hire({ coin, deliveries }: { coin: Coin; deliveries: Delivery[] 
             {d.media_url && <img src={d.media_url} alt={`Meme drawn by $${coin.ticker}`} className="mt-2 w-full rounded-xl border-2 border-ink" />}
             <p className="mt-2 font-serif text-lg leading-snug">{prettyText(d.text)}</p>
             <p className="mt-1 text-[0.7rem] opacity-70">AI · {d.model.split("/").pop()}</p>
+            <ProofBadge chatId={d.chat_id} model={d.model} requestHash={d.request_hash} responseHash={d.response_hash} />
           </li>
         ))}
         {!deliveries.length && <li className="text-sm">No jobs delivered yet. Be the first to hire it.</li>}

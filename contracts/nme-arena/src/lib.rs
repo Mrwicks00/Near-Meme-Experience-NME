@@ -16,6 +16,9 @@ use nme_common::{dcl_pool_id, parse_dcl_pool_id, Feed, FeedItem};
 
 mod raids;
 pub use raids::{Raid, RaidState};
+mod proofs;
+mod spoils;
+pub use spoils::Spoils;
 
 const ONE_YOCTO: NearToken = NearToken::from_yoctonear(1);
 /// Smallest router buy (keeps dust out of the feed and the fee math meaningful).
@@ -296,6 +299,10 @@ struct BrainOut {
     media_url: String,
     #[serde(default)]
     media_hash: String,
+    #[serde(default)]
+    request_hash: String,
+    #[serde(default)]
+    response_hash: String,
 }
 
 /// A delivery as the views return it: the stored text plus the picture of a `meme` job, if any.
@@ -312,6 +319,9 @@ pub struct DeliveryOut {
     pub ts_ms: u64,
     pub media_url: String,
     pub media_hash: String,
+    /// Proof of Thought: sha256 of the exact NEAR AI request and response (empty for deliveries made before proofs).
+    pub request_hash: String,
+    pub response_hash: String,
 }
 
 /// Self-Defending Memes (docs/12 §4): immutable caps and timings. The AI only chooses *when*; these decide *how much*.
@@ -1107,6 +1117,11 @@ impl Contract {
     /// Debits `near` from the chest (or treasury) of `key` and runs the chain: DCL quote → swap to the arena →
     /// read the arena's balance of the token → burn (native `burn`, else the graveyard). Every failure restores the ledger.
     fn buy_and_burn(&mut self, key: &str, src: &str, from_chest: bool, near: u128) -> Promise {
+        self.buy_and_burn_x(key, src, from_chest, near, None)
+    }
+
+    /// `spoils = Some(round)`: a won war's buy; half of the bought tokens go to that round's fighters (spoils.rs).
+    fn buy_and_burn_x(&mut self, key: &str, src: &str, from_chest: bool, near: u128, spoils: Option<u64>) -> Promise {
         let target = self.coins.get(key).cloned().unwrap_or_else(|| env::panic_str("unknown coin"));
         require!(target.launched && target.pool_id.is_some(), "coin has no pool");
         let mut source = self.coins.get(src).cloned().unwrap_or_else(|| env::panic_str("unknown source coin"));
@@ -1123,7 +1138,7 @@ impl Contract {
                 NearToken::from_yoctonear(0),
                 Gas::from_tgas(15),
             )
-            .then(Self::ext(env::current_account_id()).with_static_gas(CB).with_unused_gas_weight(1).bb_quoted(key.to_string(), src.to_string(), from_chest, U128(near)))
+            .then(Self::ext(env::current_account_id()).with_static_gas(CB).with_unused_gas_weight(1).bb_quoted(key.to_string(), src.to_string(), from_chest, U128(near), spoils))
     }
 
     /// A buy-and-burn never burns more than the quote plus this margin, so a burn can never reach a large stash that
@@ -1131,7 +1146,7 @@ impl Contract {
     const BURN_CAP_MARGIN_BPS: u16 = 2_000;
 
     #[private]
-    pub fn bb_quoted(&mut self, key: String, src: String, from_chest: bool, near: U128) -> PromiseOrValue<bool> {
+    pub fn bb_quoted(&mut self, key: String, src: String, from_chest: bool, near: U128, spoils: Option<u64>) -> PromiseOrValue<bool> {
         let Some(quote) = env::promise_result_checked(0, 1024).ok().and_then(|b| serde_json::from_slice::<QuoteOut>(&b).ok()) else {
             return self.bb_fail(&src, from_chest, near.0, "quote failed");
         };
@@ -1148,12 +1163,12 @@ impl Contract {
                     ONE_YOCTO,
                     Gas::from_tgas(100),
                 )
-                .then(Self::ext(env::current_account_id()).with_static_gas(CB).with_unused_gas_weight(1).bb_swapped(key, src, from_chest, near, U128(max_burn))),
+                .then(Self::ext(env::current_account_id()).with_static_gas(CB).with_unused_gas_weight(1).bb_swapped(key, src, from_chest, near, U128(max_burn), spoils)),
         )
     }
 
     #[private]
-    pub fn bb_swapped(&mut self, key: String, src: String, from_chest: bool, near: U128, max_burn: U128) -> PromiseOrValue<bool> {
+    pub fn bb_swapped(&mut self, key: String, src: String, from_chest: bool, near: U128, max_burn: U128, spoils: Option<u64>) -> PromiseOrValue<bool> {
         let used = env::promise_result_checked(0, 256).ok().and_then(|b| serde_json::from_slice::<U128>(&b).ok()).map(|u| u.0.min(near.0)).unwrap_or(0);
         let unused = near.0 - used;
         if unused > 0 {
@@ -1171,16 +1186,28 @@ impl Contract {
         PromiseOrValue::Promise(
             Promise::new(token)
                 .function_call("ft_balance_of", json!({ "account_id": env::current_account_id() }).to_string().into_bytes(), NearToken::from_yoctonear(0), Gas::from_tgas(5))
-                .then(Self::ext(env::current_account_id()).with_static_gas(CB).with_unused_gas_weight(1).bb_balance(key, U128(used), max_burn)),
+                .then(Self::ext(env::current_account_id()).with_static_gas(CB).with_unused_gas_weight(1).bb_balance(key, U128(used), max_burn, spoils)),
         )
     }
 
     /// Burn the arena's tokens of this coin (at most `max_burn`), except tokens that belong to a seller whose transfer is in flight.
     #[private]
-    pub fn bb_balance(&mut self, key: String, spent: U128, max_burn: U128) -> PromiseOrValue<bool> {
+    pub fn bb_balance(&mut self, key: String, spent: U128, max_burn: U128, spoils: Option<u64>) -> PromiseOrValue<bool> {
         let bal = env::promise_result_checked(0, 128).ok().and_then(|b| serde_json::from_slice::<U128>(&b).ok()).map(|u| u.0).unwrap_or(0);
         let entry = self.coins.get(&key).cloned().unwrap();
-        let burnable = bal.saturating_sub(self.sell_in_flight.get(&entry.account).copied().unwrap_or(0)).min(max_burn.0);
+        // Never a seller's tokens in flight, never tokens reserved for war fighters (spoils).
+        let mut burnable = bal
+            .saturating_sub(self.sell_in_flight.get(&entry.account).copied().unwrap_or(0))
+            .saturating_sub(spoils::reserved(&key))
+            .min(max_burn.0);
+        if let Some(rid) = spoils {
+            let keep = spoils::fill(rid, &key, burnable);
+            burnable -= keep;
+            if keep > 0 {
+                self.push_feed("spoils_reserved", &key, "", keep, &format!("round={rid}"));
+                events::emit("spoils_reserved", json!({ "round": rid, "coin": key, "tokens": U128(keep) }));
+            }
+        }
         if burnable == 0 {
             events::emit("buyback_failed", json!({ "key": key, "reason": "nothing to burn", "near": spent }));
             return PromiseOrValue::Value(false);
@@ -1425,6 +1452,7 @@ impl Contract {
                 } else {
                     self.delivery_media.remove(&(seq % DELIVERY_RING));
                 }
+                proofs::set_delivery_proof(seq % DELIVERY_RING, &out.request_hash, &out.response_hash);
                 self.deliveries.insert(
                     seq % DELIVERY_RING,
                     Delivery { seq, job_id, ticker: job.ticker.clone(), kind: job.kind.clone(), text: text.clone(), model: out.model.clone(), chat_id: out.chat_id.clone(), ts_ms: env::block_timestamp_ms() },
@@ -1586,6 +1614,7 @@ impl Contract {
         let seq = self.next_commentary;
         self.next_commentary += 1;
         let now = env::block_timestamp_ms();
+        proofs::set_commentary_proof(seq % COMMENTARY_RING, seq, &out.request_hash, &out.response_hash);
         self.commentary.insert(seq % COMMENTARY_RING, Commentary { seq, ticker: ticker.clone(), event: event.clone(), text: text.clone(), model: out.model, chat_id: out.chat_id, ts_ms: now });
         self.push_feed("commentary", &ticker, "brain", 0, &format!("{event}: {}", text.chars().take(150).collect::<String>()));
         events::emit("commentary", json!({ "ticker": ticker, "event": event, "text": text, "ai": true }));
@@ -1652,7 +1681,8 @@ impl Contract {
                 let slot = (n - 1 - i) % DELIVERY_RING;
                 let d = self.deliveries.get(&slot).cloned()?;
                 let (media_url, media_hash) = self.delivery_media.get(&slot).cloned().unwrap_or_default();
-                Some(DeliveryOut { seq: d.seq, job_id: d.job_id, ticker: d.ticker, kind: d.kind, text: d.text, model: d.model, chat_id: d.chat_id, ts_ms: d.ts_ms, media_url, media_hash })
+                let (request_hash, response_hash) = proofs::delivery_proof(slot);
+                Some(DeliveryOut { seq: d.seq, job_id: d.job_id, ticker: d.ticker, kind: d.kind, text: d.text, model: d.model, chat_id: d.chat_id, ts_ms: d.ts_ms, media_url, media_hash, request_hash, response_hash })
             })
             .collect()
     }
@@ -2008,8 +2038,12 @@ impl Contract {
             "war_settled",
             json!({ "round": round_id, "pair": idx, "winner": w, "loser": l, "burn_near": pair.stake, "scores": [pair.score_a, pair.score_b], "unique": [pair.unique_a, pair.unique_b] }),
         );
-        // The loser's committed NEAR buys the winner on its Rhea pool and burns it. A failed swap restores the loser's chest.
-        Ok(Some(self.buy_and_burn(&w, &l, true, pair.stake.0)))
+        // The loser's committed NEAR buys the winner on its Rhea pool. Half of what it buys is burned, half goes to the
+        // winning side's fighters (spoils.rs). A failed swap restores the loser's chest.
+        let total = if pair.a == w { pair.score_a.0 } else { pair.score_b.0 }.saturating_sub(self.raid_points_in(&w, round_id));
+        let token = self.coins.get(&w).map(|e| e.account.clone()).unwrap_or_else(|| env::panic_str("unknown coin"));
+        let share = spoils::open(round_id, &w, token, total, bps_of(pair.stake.0, self.war.wallet_cap_bps)).then_some(round_id);
+        Ok(Some(self.buy_and_burn_x(&w, &l, true, pair.stake.0, share)))
     }
 
     /// Queues a commentary line for a native coin (outside coins have no brain). The task re-checks the tier, the
@@ -4104,5 +4138,144 @@ mod tests {
         raid_ctx("x.testnet", RAID_START_DEPOSIT, 1_100, 2_000);
         assert_eq!(a.start_raid("bat.testnet".into()).tag, "nme_bat_raid_2", "other coins raid independently");
         assert!(a.due_tasks(50).iter().any(|t| t.task == Task::RaidSettle { raid_id: 1 }), "settling is queued for the tick");
+    }
+
+    // ---------------------------------------------------------------- Proof of Thought
+    const RQ: &str = "4fe6f78cbff4c0fb522e34e1f365f23d313f3cf57a149065a314ab3832c21897";
+    const RS: &str = "FDB968570C5CCA4A18BA106C77CF7545959020ED42FF2F1934159334425BA843";
+
+    #[test]
+    fn a_delivery_keeps_its_proof_hashes_and_a_bad_or_missing_proof_is_stored_as_empty() {
+        let mut a = two_coins(0, 0);
+        let id = hired(&mut a, NEAR1);
+        let good = GOOD.replace("\"completion_tokens\":2}", &format!("\"completion_tokens\":2,\"request_hash\":\"{RQ}\",\"response_hash\":\"{RS}\"}}"));
+        with_result(Some(&good));
+        a.on_job_result(id);
+        let d = &a.get_deliveries(5)[0];
+        assert_eq!((d.request_hash.as_str(), d.response_hash.as_str()), (RQ, RS.to_ascii_lowercase().as_str()), "stored, lower-cased");
+        // A later delivery in another slot with a malformed proof records none (and never panics).
+        let id2 = hired(&mut a, NEAR1);
+        with_result(Some(&GOOD.replace("\"completion_tokens\":2}", "\"completion_tokens\":2,\"request_hash\":\"zz\",\"response_hash\":\"\"}")));
+        a.on_job_result(id2);
+        let d2 = &a.get_deliveries(5)[0];
+        assert_eq!((d2.request_hash.as_str(), d2.response_hash.as_str()), ("", ""));
+        assert_eq!(a.get_deliveries(5)[1].request_hash, RQ, "the first delivery keeps its own proof");
+    }
+
+    #[test]
+    fn a_commentary_line_keeps_its_proof_for_its_own_seq_only() {
+        let mut a = talking();
+        let line = LINE.replace("\"chat_id\":\"c1\"}", &format!("\"chat_id\":\"c1\",\"request_hash\":\"{RQ}\",\"response_hash\":\"{RQ}\"}}"));
+        with_result(Some(&line));
+        a.on_commentary_result("pepe".into(), "war_started".into());
+        let seq = a.get_commentary(5)[0].seq;
+        assert_eq!(a.commentary_proof(seq).unwrap()["request_hash"], RQ);
+        assert!(a.commentary_proof(seq + COMMENTARY_RING).is_none(), "another seq in the same slot has no proof");
+    }
+
+    // ---------------------------------------------------------------- spoils of war
+    use crate::spoils::SPOILS_CLAIM_MS;
+
+    fn cb(result: Option<&str>, ms: u64) {
+        let r = match result {
+            Some(body) => near_sdk::PromiseResult::Successful(body.as_bytes().to_vec()),
+            None => near_sdk::PromiseResult::Failed,
+        };
+        testing_env!(
+            VMContextBuilder::new().predecessor_account_id(acct("arena.testnet")).current_account_id(acct("arena.testnet")).block_timestamp(ms * 1_000_000).prepaid_gas(Gas::from_tgas(300)).build(),
+            near_sdk::test_vm_config(),
+            near_sdk::RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![r]
+        );
+    }
+
+    /// bat wins round 1 (w3 and w4 scored 1 NEAR each), the buy lands 1000 bat tokens: 500 burned, 500 reserved.
+    fn won_with_spoils() -> Contract {
+        let mut a = two_coins(10 * NEAR1, 4 * NEAR1);
+        at("anyone.testnet", NEAR1 / 10, 1_000);
+        a.start_round();
+        score_both(&mut a, &[("w1.testnet", NEAR1 / 2), ("w2.testnet", NEAR1 / 2)], &[("w3.testnet", NEAR1), ("w4.testnet", NEAR1)]);
+        at("anyone.testnet", 0, 70_000);
+        let _ = a.settle_round(1);
+        let s = a.get_spoils(1, "bat.testnet".into()).expect("spoils opened for the winner");
+        assert_eq!((s.total_score.0, s.tokens.0), (2 * NEAR1, 0));
+        cb(Some("\"1000\""), 80_000);
+        let _ = a.bb_balance("bat.testnet".into(), U128(2 * NEAR1), U128(10_000), Some(1));
+        a
+    }
+
+    #[test]
+    fn a_won_war_burns_half_and_reserves_half_for_the_fighters() {
+        let a = won_with_spoils();
+        assert_eq!(a.get_spoils(1, "bat.testnet".into()).unwrap().tokens.0, 500);
+        assert_eq!(crate::spoils::reserved("bat.testnet"), 500);
+        assert_eq!(a.spoils_claimable(1, "bat.testnet".into(), acct("w3.testnet")).0, 250, "half of the spoils: same score as w4");
+        assert_eq!(a.spoils_claimable(1, "bat.testnet".into(), acct("w1.testnet")).0, 0, "the losing side gets nothing");
+        assert_eq!(a.spoils_claimable(1, "bat.testnet".into(), acct("nobody.testnet")).0, 0);
+    }
+
+    #[test]
+    fn reserved_spoils_are_never_burned_by_a_later_buyback() {
+        let mut a = won_with_spoils();
+        // The arena holds 500 reserved + 300 newly bought: a treasury buyback may burn only the 300.
+        cb(Some("\"800\""), 90_000);
+        let _ = a.bb_balance("bat.testnet".into(), U128(NEAR1), U128(10_000), None);
+        assert_eq!(crate::spoils::reserved("bat.testnet"), 500, "untouched");
+        let last = a.feed_since(0, 500).into_iter().filter(|f| f.kind == "spoils_reserved").count();
+        assert_eq!(last, 1, "reserved once, at the war's buy");
+    }
+
+    #[test]
+    fn a_fighter_claims_once_and_a_failed_transfer_gives_the_share_back() {
+        let mut a = won_with_spoils();
+        testing_env!(VMContextBuilder::new().predecessor_account_id(acct("w3.testnet")).current_account_id(acct("arena.testnet")).attached_deposit(NearToken::from_yoctonear(1)).block_timestamp(100_000 * 1_000_000).build());
+        let _ = a.claim_spoils(1, "bat.testnet".into());
+        assert_eq!(crate::spoils::reserved("bat.testnet"), 250);
+        assert_eq!(a.spoils_claimable(1, "bat.testnet".into(), acct("w3.testnet")).0, 0, "booked");
+        // the transfer failed (not registered on the coin): everything is restored
+        cb(None, 100_100);
+        assert!(!a.on_spoils_sent(1, "bat.testnet".into(), acct("w3.testnet"), U128(250)));
+        assert_eq!((crate::spoils::reserved("bat.testnet"), a.spoils_claimable(1, "bat.testnet".into(), acct("w3.testnet")).0), (500, 250));
+        // claim again, this time it lands; a third claim has nothing left
+        testing_env!(VMContextBuilder::new().predecessor_account_id(acct("w3.testnet")).current_account_id(acct("arena.testnet")).attached_deposit(NearToken::from_yoctonear(1)).block_timestamp(100_200 * 1_000_000).build());
+        let _ = a.claim_spoils(1, "bat.testnet".into());
+        cb(Some(""), 100_300);
+        assert!(a.on_spoils_sent(1, "bat.testnet".into(), acct("w3.testnet"), U128(250)));
+        testing_env!(VMContextBuilder::new().predecessor_account_id(acct("w3.testnet")).current_account_id(acct("arena.testnet")).attached_deposit(NearToken::from_yoctonear(1)).build());
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let _ = a.claim_spoils(1, "bat.testnet".into()); })).is_err());
+    }
+
+    #[test]
+    fn unclaimed_spoils_burn_only_after_seven_days() {
+        let mut a = won_with_spoils();
+        testing_env!(VMContextBuilder::new().predecessor_account_id(acct("anyone.testnet")).current_account_id(acct("arena.testnet")).block_timestamp(100_000 * 1_000_000).build());
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let _ = a.burn_unclaimed_spoils(1, "bat.testnet".into()); })).is_err(), "window open");
+        let settled = a.get_spoils(1, "bat.testnet".into()).unwrap().settled_ms;
+        testing_env!(VMContextBuilder::new().predecessor_account_id(acct("anyone.testnet")).current_account_id(acct("arena.testnet")).block_timestamp((settled + SPOILS_CLAIM_MS) * 1_000_000).prepaid_gas(Gas::from_tgas(300)).build());
+        let _ = a.burn_unclaimed_spoils(1, "bat.testnet".into());
+        let s = a.get_spoils(1, "bat.testnet".into()).unwrap();
+        assert!(s.closed);
+        assert_eq!(crate::spoils::reserved("bat.testnet"), 0, "released into the burn");
+        assert_eq!(a.spoils_claimable(1, "bat.testnet".into(), acct("w4.testnet")).0, 0, "closed: nothing left to claim");
+    }
+
+    #[test]
+    fn raid_points_earn_no_share_of_the_spoils() {
+        let mut a = two_coins(10 * NEAR1, 4 * NEAR1);
+        treasury_of(&mut a, "pepe", NEAR1);
+        at("anyone.testnet", NEAR1 / 10, 1_000);
+        a.start_round();
+        raid_ctx("starter.testnet", RAID_START_DEPOSIT, 1_000, 1_000);
+        a.start_raid("bat.testnet".into());
+        for i in 0..3 {
+            assert!(claim(&mut a, &format!("r{i}.testnet"), "go #nme_bat_raid_1", 1_100, "1"));
+        }
+        let stake = a.get_round(1).unwrap().pairs[0].stake.0;
+        score_both(&mut a, &[("w1.testnet", NEAR1 / 2), ("w2.testnet", NEAR1 / 2)], &[("w3.testnet", NEAR1 / 2), ("w4.testnet", NEAR1 / 2)]);
+        at("anyone.testnet", 0, 70_000);
+        let _ = a.settle_round(1);
+        let s = a.get_spoils(1, "bat.testnet".into()).expect("bat won thanks to the raid");
+        assert_eq!(s.total_score.0, NEAR1, "only the two buying wallets count, not the {} raid points", stake * 600 / 10_000);
     }
 }

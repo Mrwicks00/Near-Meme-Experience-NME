@@ -1,5 +1,5 @@
 import { makeServer } from "./server.js";
-import { NearAiLlm, RpcChain, nearAiIcon } from "./nearai.js";
+import { NearAiLlm, RpcChain, nearAiIcon, nearAiProof } from "./nearai.js";
 
 const key = process.env.NEAR_AI_API_KEY;
 if (!key) throw new Error("NEAR_AI_API_KEY is required (the only secret this service has; it holds no NEAR key)");
@@ -14,5 +14,6 @@ const server = makeServer({
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
   perMin: Number(process.env.RATE_PER_MIN ?? 10),
   token: process.env.SVC_TOKEN ?? "",
+  proof: nearAiProof(key),
 });
 server.listen(port, () => console.log(`nme intent service on :${port} (parse + preview only, no signing), root ${root}`));

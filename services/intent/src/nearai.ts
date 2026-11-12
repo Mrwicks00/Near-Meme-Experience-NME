@@ -74,3 +74,47 @@ export class RpcChain implements Chain {
     throw new Error(`NEAR RPC is not reachable: ${String(last).slice(0, 80)}`);
   }
 }
+
+/**
+ * Proof of Thought lookup (read-only, uses the API key server side): NEAR AI's signature for a chat id, plus the
+ * signing addresses the model's hardware attestation vouches for. The browser re-checks the signature itself.
+ */
+export type Proof = {
+  chat_id: string; model: string; text: string; signature: string; signing_address: string; signature_kind: string | null;
+  attested_addresses: string[]; attestation_nonce: string; intel_quote: string | null;
+};
+const attCache = new Map<string, { at: number; addrs: string[]; nonce: string; quote: string | null }>();
+
+async function getJson(url: string, key: string, ms: number): Promise<any> {
+  const r = await fetch(url, { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(ms) });
+  const body = await r.text();
+  if (!r.ok) throw new DraftError(`NEAR AI answered HTTP ${r.status}: ${body.slice(0, 120)}`);
+  return JSON.parse(body);
+}
+
+export function nearAiProof(key: string) {
+  return async (chatId: string, model: string): Promise<Proof> => {
+    // A model can run on several TEE nodes; the signature lives on the node that served the call: retry a few times.
+    let sig: any = null;
+    for (let i = 0; i < 4 && !sig; i++) {
+      try {
+        sig = await getJson(`${BASE}/signature/${encodeURIComponent(chatId)}?model=${encodeURIComponent(model)}&signing_algo=ecdsa`, key, 15_000);
+      } catch (e) {
+        if (i === 3) throw e;
+        await new Promise((r) => setTimeout(r, 600));
+      }
+    }
+    let att = attCache.get(model);
+    if (!att || Date.now() - att.at > 10 * 60_000) {
+      const nonce = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+      const rep = await getJson(`${BASE}/attestation/report?model=${encodeURIComponent(model)}&signing_algo=ecdsa&nonce=${nonce}`, key, 30_000);
+      const list: any[] = rep.model_attestations ?? rep.all_attestations ?? [];
+      att = { at: Date.now(), nonce, addrs: list.map((a) => String(a.signing_address ?? "").toLowerCase()).filter(Boolean), quote: list[0]?.intel_quote ?? null };
+      attCache.set(model, att);
+    }
+    return {
+      chat_id: chatId, model, text: String(sig.text), signature: String(sig.signature), signing_address: String(sig.signing_address).toLowerCase(),
+      signature_kind: sig.signature_kind ?? null, attested_addresses: att.addrs, attestation_nonce: att.nonce, intel_quote: att.quote,
+    };
+  };
+}

@@ -159,7 +159,11 @@ export function describe(f: FeedItem): Line {
     case "war_started":
       return { tone: "war", tag: "War", text: `${t} vs $${T(f.actor)} — the fight is on. ${nearStr(f.amount)} at stake` };
     case "war_settled":
-      return { tone: "war", tag: "Winner", text: `${t} beat $${T(f.actor)}. ${nearStr(f.amount)} of the loser's chest buys ${t} and burns it` };
+      return { tone: "war", tag: "Winner", text: `${t} beat $${T(f.actor)}. ${nearStr(f.amount)} of the loser's chest buys ${t}: half burned, half to ${t}'s fighters` };
+    case "spoils_reserved":
+      return { tone: "chest", tag: "Spoils", text: `${compact(tokens(f.amount))} ${t} reserved for the fighters who won round ${kv(f.extra, "round") ?? "?"}: claim on the Colosseum page` };
+    case "spoils_claimed":
+      return { tone: "chest", tag: "Spoils", text: `${who(f.actor)} claimed ${compact(tokens(f.amount))} ${t} of spoils (round ${kv(f.extra, "round") ?? "?"})` };
     case "war_void":
       return { tone: "plain", tag: "No contest", text: `${t} vs $${T(f.actor)} called off: ${f.extra}` };
     case "treasury_buyback":
@@ -206,7 +210,7 @@ export function describe(f: FeedItem): Line {
 export type CrownStatus = { owner: string; vault: string; inactivity_ms: number; last_heartbeat_ms: number; forfeitable_after_ms: number; forfeited: boolean };
 export type DefenseConfig = { per_action_bps: number; daily_bps: number; cooldown_ms: number; interval_ms: number; look_points: number; trigger_points: number; fallback_after: number; min_treasury: string; outlayer_fee: string; fee_cap_per_day: string };
 export type DefenseState = { high_point: number; high_ms: number; last_action_ms: number; day_start_ms: number; day_spent_bps: number; misses: number; in_flight_until_ms: number };
-export type Delivery = { seq: number; job_id: number; ticker: string; kind: string; text: string; model: string; chat_id: string; ts_ms: number; media_url?: string | null; media_hash?: string | null };
+export type Delivery = { seq: number; job_id: number; ticker: string; kind: string; text: string; model: string; chat_id: string; ts_ms: number; media_url?: string | null; media_hash?: string | null; request_hash?: string; response_hash?: string };
 export const JOB_KINDS = ["roast", "shill", "lore", "meme"] as const;
 
 /** "6 d 4 h", "3 h 12 min", "8 min". */

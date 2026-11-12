@@ -148,8 +148,20 @@ async fn the_deployed_arena_takes_raids_without_a_migration() -> testresult::Tes
     }
     near_api::Contract::deploy(arena.clone()).use_code(wasm("nme_arena")).without_init_call().with_signer(ctx.signer.clone()).send_to(&ctx.net).await?.assert_success();
     for (i, (m, a)) in views.iter().enumerate() {
-        assert_eq!(snap[i], ctx.view::<Value>(&arena, m, a.clone()).await?, "arena view {m}({a}) changed");
+        let mut got: Value = ctx.view(&arena, m, a.clone()).await?;
+        if *m == "get_deliveries" {
+            // The only intended difference: deliveries gain the Proof of Thought hashes, empty for the ones made before.
+            for d in got.as_array_mut().unwrap() {
+                let o = d.as_object_mut().unwrap();
+                assert_eq!(o.remove("request_hash"), Some(json!("")));
+                assert_eq!(o.remove("response_hash"), Some(json!("")));
+            }
+        }
+        assert_eq!(snap[i], got, "arena view {m}({a}) changed");
     }
+    // Spoils and proofs start empty on the live state.
+    let none: Value = ctx.view(&arena, "get_spoils", json!({"round_id": 1, "coin": "pepe"})).await?;
+    assert!(none.is_null());
     let rules: Value = ctx.view(&arena, "raid_rules", json!({})).await?;
     assert_eq!(rules["social"], "v1.social08.testnet");
     let none: Value = ctx.view(&arena, "latest_raid", json!({"ticker": "pepe"})).await?;
@@ -158,8 +170,10 @@ async fn the_deployed_arena_takes_raids_without_a_migration() -> testresult::Tes
     let genesis: AccountId = near_sandbox::config::DEFAULT_GENESIS_ACCOUNT.to_owned();
     ctx.call(&arena, &genesis, "start_raid", json!({"ticker": "pepe"}), 20, 50).await?.assert_success();
     let raid: Value = ctx.view(&arena, "latest_raid", json!({"ticker": "pepe"})).await?;
-    assert_eq!(raid["tag"], "nme_pepe_raid_1");
+    // Raid ids are global (the live arena already ran raids), so the id is whatever comes next.
+    let id = raid["id"].as_u64().unwrap();
+    assert_eq!(raid["tag"], format!("nme_pepe_raid_{id}"));
     let due: Value = ctx.view(&arena, "due_tasks", json!({"limit": 200})).await?;
-    assert!(due.as_array().unwrap().iter().any(|t| t["task"]["RaidSettle"]["raid_id"] == 1), "settlement queued");
+    assert!(due.as_array().unwrap().iter().any(|t| t["task"]["RaidSettle"]["raid_id"] == id), "settlement queued");
     Ok(())
 }

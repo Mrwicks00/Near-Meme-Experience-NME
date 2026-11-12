@@ -247,6 +247,11 @@ impl Contract {
         add
     }
 
+    /// War points raids added to `ticker` in round `round_id` (excluded from the fighters' spoils: points are not a wallet).
+    pub(crate) fn raid_points_in(&self, ticker: &str, round_id: u64) -> u128 {
+        latest().get(ticker).and_then(|id| raids().get(id).cloned()).filter(|r| r.points_round == round_id).map(|r| r.points.0).unwrap_or(0)
+    }
+
     /// Run by `tick` after the window: burns `claims x 0.1%` (max 1%) of the coin's treasury and closes the raid.
     pub(crate) fn settle_raid(&mut self, raid_id: u64, now: u64) -> bool {
         let mut all = raids();
