@@ -160,6 +160,8 @@ export function describe(f: FeedItem): Line {
       return { tone: "war", tag: "War", text: `${t} vs $${T(f.actor)} — the fight is on. ${nearStr(f.amount)} at stake` };
     case "war_settled":
       return { tone: "war", tag: "Winner", text: `${t} beat $${T(f.actor)}. ${nearStr(f.amount)} of the loser's chest buys ${t}: half burned, half to ${t}'s fighters` };
+    case "mercenary_hired":
+      return { tone: "ai", tag: "Mercenary", text: `${t} hired $${T(f.actor)}'s brain as a mercenary against $${T(kv(f.extra, "vs") ?? "?")}, paid ${nearStr(f.amount)} from its treasury. The fee buys and burns $${T(f.actor)}` };
     case "spoils_reserved":
       return { tone: "chest", tag: "Spoils", text: `${compact(tokens(f.amount))} ${t} reserved for the fighters who won round ${kv(f.extra, "round") ?? "?"}: claim on the Colosseum page` };
     case "spoils_claimed":

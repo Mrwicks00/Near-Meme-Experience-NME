@@ -18,6 +18,7 @@ mod raids;
 pub use raids::{Raid, RaidState};
 mod proofs;
 mod spoils;
+mod mercenary;
 pub use spoils::Spoils;
 
 const ONE_YOCTO: NearToken = NearToken::from_yoctonear(1);
@@ -82,6 +83,8 @@ pub enum Task {
     CrownForfeit { ticker: String },
     /// After a raid's window: burns its share of the coin's treasury and closes it (appended last: borsh order kept).
     RaidSettle { raid_id: u64 },
+    /// At a war's start: `coin` hires another coin's brain as a mercenary against `rival`, paid from its treasury (capped).
+    Mercenary { round_id: u64, coin: String, rival: String },
 }
 
 #[near(serializers = [json])]
@@ -108,6 +111,7 @@ fn task_gas(t: &Task) -> Gas {
         Task::Commentary { .. } => 200,
         Task::CrownForfeit { .. } => 220,
         Task::RaidSettle { .. } => 235,
+        Task::Mercenary { .. } => 160,
     })
 }
 
@@ -881,6 +885,21 @@ impl Contract {
         self.inline_start();
     }
 
+    /// Anyone gives NEAR to a coin's treasury (a gift: **no method withdraws a treasury**, I3). It is spent only on
+    /// buying and burning the coin (defense, raids) or on one capped mercenary job per war.
+    #[payable]
+    pub fn fund_treasury(&mut self, key: String) {
+        let mut entry = self.coins.get(&key).cloned().unwrap_or_else(|| env::panic_str("unknown coin"));
+        let amount = env::attached_deposit().as_yoctonear();
+        require!(amount > 0, "attach NEAR to fund the treasury");
+        entry.treasury_near = U128(entry.treasury_near.0 + amount);
+        let total = entry.treasury_near.0;
+        self.coins.insert(key.clone(), entry);
+        let who = env::predecessor_account_id();
+        self.push_feed("treasury_funded", &key, who.as_str(), amount, &format!("treasury={total}"));
+        events::emit("treasury_funded", json!({ "key": key, "by": who, "amount": U128(amount), "treasury": U128(total) }));
+    }
+
     // ================================================================ fees
 
     /// Registered coin only: the NEAR side of claimed pool fees. Split PumpBag vault / coin treasury / protocol bucket.
@@ -1384,10 +1403,16 @@ impl Contract {
         let attached = env::attached_deposit().as_yoctonear();
         let price = self.job_price.get(&ticker).map(|p| p.0).unwrap_or(0).max(self.brain.min_price.0);
         require!(attached >= price, "payment is below this coin's job price");
+        self.open_job(&entry, &ticker, &kind, &target, &prompt, env::predecessor_account_id(), attached)
+    }
+
+    /// Opens a job on `ticker`'s brain paid with `attached` (fees included): escrow, record, deadline refund, OutLayer
+    /// request. Shared by `hire` (a person pays) and mercenary hires (a coin's treasury pays, mercenary.rs).
+    pub(crate) fn open_job(&mut self, entry: &CoinEntry, ticker: &str, kind: &str, target: &str, prompt: &str, payer: AccountId, attached: u128) -> u64 {
+        let (ticker, kind) = (ticker.to_string(), kind.to_string());
         let overhead = self.brain.outlayer_fee.0 + self.brain.record_reserve.0;
         let amount = attached.checked_sub(overhead).unwrap_or_else(|| env::panic_str("payment does not cover the fees"));
         require!(amount > 0, "nothing left to escrow");
-        let payer = env::predecessor_account_id();
         let id = self.next_job_id;
         self.next_job_id += 1;
         let now = env::block_timestamp_ms();
@@ -1832,6 +1857,7 @@ impl Contract {
             Task::DefenseCheck { ticker } => self.defense_check(ticker, now),
             Task::Commentary { ticker, event, detail } => self.run_commentary(ticker, event, detail, now),
             Task::RaidSettle { raid_id } => self.settle_raid(raid_id, now),
+            Task::Mercenary { round_id, coin, rival } => self.run_mercenary(round_id, coin, rival, now),
             Task::CrownForfeit { ticker } => {
                 let Some((due, _)) = self.crown_deadlines.get(&ticker).copied() else { return false };
                 if now <= due {
@@ -1961,6 +1987,9 @@ impl Contract {
         let announce: Vec<(String, String)> = pairs.iter().flat_map(|p| [(p.a.clone(), p.b.clone()), (p.b.clone(), p.a.clone())]).collect();
         for (me, rival) in announce {
             self.queue_commentary(&me, "war_started", &format!("a Colosseum war against {rival} just started"));
+            if self.coins.get(&me).map(|e| e.kind == Kind::Native).unwrap_or(false) {
+                self.enqueue(now, Task::Mercenary { round_id: id, coin: me.clone(), rival: rival.clone() });
+            }
         }
         self.rounds.insert(id, Round { id, start_ms: now, end_ms, pairs, settled_pairs: 0 });
         self.last_round_id = id;
@@ -2179,7 +2208,15 @@ impl Contract {
         job.status = JobStatus::Refunded;
         let (id, payer, amount) = (job.id, job.payer.clone(), job.amount.0);
         self.jobs.insert(id, job);
-        Promise::new(payer.clone()).transfer(NearToken::from_yoctonear(amount)).detach();
+        if let Some(sponsor) = mercenary::sponsor_of(id) {
+            // A mercenary job was paid by a coin's treasury: the escrow goes back there, never to a wallet (I3).
+            if let Some(mut e) = self.coins.get(&sponsor).cloned() {
+                e.treasury_near = U128(e.treasury_near.0.saturating_add(amount));
+                self.coins.insert(sponsor.clone(), e);
+            }
+        } else {
+            Promise::new(payer.clone()).transfer(NearToken::from_yoctonear(amount)).detach();
+        }
         self.push_feed("job_refunded", "", payer.as_str(), amount, &format!("job={id} {why}"));
         events::emit("job_refunded", json!({ "job_id": id, "payer": payer, "amount": U128(amount), "reason": why }));
     }
@@ -4277,5 +4314,89 @@ mod tests {
         let _ = a.settle_round(1);
         let s = a.get_spoils(1, "bat.testnet".into()).expect("bat won thanks to the raid");
         assert_eq!(s.total_score.0, NEAR1, "only the two buying wallets count, not the {} raid points", stake * 600 / 10_000);
+    }
+
+    // ---------------------------------------------------------------- mercenaries
+    use crate::mercenary::{pick, MERC_CAP_BPS};
+
+    /// pepe (native) vs bat (outside) at war, plus `frog`, a third native coin that can be hired.
+    fn war_with_a_mercenary_pool(pepe_treasury: u128) -> Contract {
+        let mut a = two_coins(10 * NEAR1, 4 * NEAR1);
+        as_caller("nme.testnet", 20 * 10u128.pow(21));
+        let _ = a.register_coin("frog".into(), acct("frog.nme.testnet"), acct("crown.frog.nme.testnet"), true, 1_000);
+        as_caller("frog.nme.testnet", 0);
+        a.record_launch("frog".into(), "frog.nme.testnet|wrap.testnet|10000".into(), "frog.nme.testnet|wrap.testnet|10000#1".into());
+        treasury_of(&mut a, "pepe", pepe_treasury);
+        at("anyone.testnet", NEAR1 / 10, 1_000);
+        a.start_round();
+        a
+    }
+
+    #[test]
+    fn a_war_start_queues_a_mercenary_for_native_coins_only() {
+        let a = war_with_a_mercenary_pool(30 * NEAR1);
+        let mercs: Vec<Task> = a.due_tasks(100).into_iter().map(|t| t.task).filter(|t| matches!(t, Task::Mercenary { .. })).collect();
+        assert_eq!(mercs, vec![Task::Mercenary { round_id: 1, coin: "pepe".into(), rival: "bat.testnet".into() }], "the outside coin has no treasury brain to pay");
+    }
+
+    #[test]
+    fn a_coin_hires_a_third_coin_within_the_cap_and_pays_from_its_treasury() {
+        let mut a = war_with_a_mercenary_pool(30 * NEAR1);
+        let price = 10u128.pow(23);
+        at("keeper.testnet", 0, 2_000);
+        assert!(a.run_mercenary(1, "pepe".into(), "bat.testnet".into(), 2_000));
+        assert_eq!(a.get_coin("pepe".into()).unwrap().treasury_near.0, 30 * NEAR1 - price, "paid from pepe's own treasury");
+        let job_id = a.next_job_id - 1;
+        let job = a.get_job(job_id).unwrap();
+        assert_eq!((job.ticker.as_str(), job.kind.as_str()), ("frog", "roast"), "frog is the only coin not fighting");
+        assert_eq!(a.mercenary_sponsor(job_id).as_deref(), Some("pepe"));
+        assert_eq!(a.feed_since(0, 500).iter().filter(|f| f.kind == "mercenary_hired").count(), 1);
+    }
+
+    #[test]
+    fn a_treasury_too_small_for_the_cap_hires_nobody() {
+        // 0.1 NEAR price needs >= 20 NEAR of treasury at 0.5%.
+        let mut a = war_with_a_mercenary_pool(19 * NEAR1);
+        at("keeper.testnet", 0, 2_000);
+        assert!(!a.run_mercenary(1, "pepe".into(), "bat.testnet".into(), 2_000));
+        assert_eq!(a.get_coin("pepe".into()).unwrap().treasury_near.0, 19 * NEAR1, "untouched");
+        assert_eq!(MERC_CAP_BPS, 50);
+    }
+
+    #[test]
+    fn a_failed_mercenary_job_refunds_the_hiring_treasury_not_a_wallet() {
+        let mut a = war_with_a_mercenary_pool(30 * NEAR1);
+        at("keeper.testnet", 0, 2_000);
+        assert!(a.run_mercenary(1, "pepe".into(), "bat.testnet".into(), 2_000));
+        let job_id = a.next_job_id - 1;
+        let escrow = a.get_job(job_id).unwrap().amount.0;
+        let t0 = a.get_coin("pepe".into()).unwrap().treasury_near.0;
+        with_result(None);
+        a.on_job_result(job_id);
+        assert_eq!(a.get_job(job_id).unwrap().status, JobStatus::Refunded);
+        assert_eq!(a.get_coin("pepe".into()).unwrap().treasury_near.0, t0 + escrow, "back in pepe's treasury");
+    }
+
+    #[test]
+    fn the_pick_is_deterministic_and_skips_after_the_round() {
+        let c = vec!["frog".to_string(), "toad".to_string(), "axolotl".to_string()];
+        testing_env!(VMContextBuilder::new().build());
+        assert_eq!(pick(&c, 7, "pepe"), pick(&c, 7, "pepe"));
+        assert!(pick(&[], 7, "pepe").is_none());
+        let mut a = war_with_a_mercenary_pool(30 * NEAR1);
+        let end = a.get_round(1).unwrap().end_ms;
+        at("keeper.testnet", 0, end + 1);
+        assert!(!a.run_mercenary(1, "pepe".into(), "bat.testnet".into(), end + 1), "too late: the war is over");
+    }
+
+    #[test]
+    fn anyone_can_gift_a_treasury_and_nothing_withdraws_it() {
+        let mut a = two_coins(0, 0);
+        at("fan.testnet", 3 * NEAR1, 1_000);
+        a.fund_treasury("pepe".into());
+        assert_eq!(a.get_coin("pepe".into()).unwrap().treasury_near.0, 3 * NEAR1);
+        assert_eq!(a.feed_since(0, 100).last().unwrap().kind, "treasury_funded");
+        at("fan.testnet", 0, 1_100);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| a.fund_treasury("pepe".into()))).is_err(), "attach NEAR");
     }
 }

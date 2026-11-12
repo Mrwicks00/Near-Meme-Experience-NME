@@ -149,8 +149,8 @@ async fn the_deployed_arena_takes_raids_without_a_migration() -> testresult::Tes
     near_api::Contract::deploy(arena.clone()).use_code(wasm("nme_arena")).without_init_call().with_signer(ctx.signer.clone()).send_to(&ctx.net).await?.assert_success();
     for (i, (m, a)) in views.iter().enumerate() {
         let mut got: Value = ctx.view(&arena, m, a.clone()).await?;
-        if *m == "get_deliveries" {
-            // The only intended difference: deliveries gain the Proof of Thought hashes, empty for the ones made before.
+        if *m == "get_deliveries" && snap[i].as_array().map(|a| a.first().map(|d| d.get("request_hash").is_none()).unwrap_or(false)).unwrap_or(false) {
+            // Deploying proofs over a pre-proof arena: deliveries gain the hash fields, empty for the ones made before.
             for d in got.as_array_mut().unwrap() {
                 let o = d.as_object_mut().unwrap();
                 assert_eq!(o.remove("request_hash"), Some(json!("")));
