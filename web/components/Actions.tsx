@@ -199,7 +199,7 @@ function Inner({ children }: { children: React.ReactNode }) {
         <BuySheet
           coin={sheet}
           initial={sheetAmount}
-          payer={signedAccountId ? { kind: "near", label: signedAccountId } : x ? { kind: "x", label: walletName(x), balance: xNear } : null}
+          payer={account ? { kind: "near", label: account } : x ? { kind: "x", label: walletName(x), balance: xNear } : null}
           onClose={() => setSheet(null)}
           onConnect={() => setChooser(true)}
           send={async (amountNear, minOut) => {
@@ -211,6 +211,16 @@ function Inner({ children }: { children: React.ReactNode }) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const outs = await signAndSendTransactions({ transactions: txs as any });
               const h = txHash(Array.isArray(outs) ? outs[outs.length - 1] : outs);
+              toast({ tone: "ok", text: `Bought $${sheet.ticker}. If a war is on, that was a hit.`, href: h ? `${NME.explorer}/txns/${h}` : undefined });
+              announceChange();
+              setSheet(null);
+              return;
+            }
+            if (play) {
+              // Google sign-in account: register on the coin if needed, then buy, both signed on this device.
+              const reg = await view<unknown>(sheet.account, "storage_balance_of", { account_id: play }).catch(() => null);
+              if (!reg) await playCall({ contractId: sheet.account, method: "storage_deposit", args: { account_id: play, registration_only: true }, tgas: 30, deposit: STORAGE_DEPOSIT });
+              const h = await playCall({ contractId: NME.arena, method: "buy", args: { key: sheet.key, min_out: minOut }, tgas: 300, deposit: yocto(amountNear) });
               toast({ tone: "ok", text: `Bought $${sheet.ticker}. If a war is on, that was a hit.`, href: h ? `${NME.explorer}/txns/${h}` : undefined });
               announceChange();
               setSheet(null);
