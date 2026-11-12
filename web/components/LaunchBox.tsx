@@ -25,7 +25,7 @@ const EMPTY: Draft = { ticker: "", name: "", description: "", persona: { vibe: "
 const field = "mt-0.5 block w-full rounded-lg border-2 border-ink/30 bg-paper-2 px-2 py-1.5 text-ink outline-none focus:border-blue";
 
 export function LaunchBox() {
-  const { account, x, xNear, connect, act, call } = useActions();
+  const { account, nearWallet, x, xNear, connect, act, call } = useActions();
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [text, setText] = useState("");
   const [answer, setAnswer] = useState("");
@@ -211,7 +211,7 @@ export function LaunchBox() {
               </dl>
               <div className="mt-5 flex flex-wrap gap-3">
                 <button className="btn flex-1 bg-mint" onClick={launch} disabled={signing || !pv || !pv.available || !!short}>
-                  {signing ? "Waiting for wallet…" : account || x ? `Launch $${(draft?.ticker || "…").toUpperCase()}${!account && x ? ` from ${walletName(x)}` : ""}` : "Connect a wallet to launch"}
+                  {signing ? (account && !nearWallet ? "Launching…" : "Waiting for wallet…") : account || x ? `Launch $${(draft?.ticker || "…").toUpperCase()}${!account && x ? ` from ${walletName(x)}` : ""}` : "Connect a wallet to launch"}
                 </button>
                 {mode === "ai" && <button className="btn bg-paper" onClick={() => fromAi(text)}>Try again</button>}
               </div>

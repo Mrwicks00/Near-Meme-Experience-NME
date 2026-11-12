@@ -199,7 +199,7 @@ function Inner({ children }: { children: React.ReactNode }) {
         <BuySheet
           coin={sheet}
           initial={sheetAmount}
-          payer={account ? { kind: "near", label: account } : x ? { kind: "x", label: walletName(x), balance: xNear } : null}
+          payer={account ? { kind: "near", label: account, device: !signedAccountId && !!play } : x ? { kind: "x", label: walletName(x), balance: xNear } : null}
           onClose={() => setSheet(null)}
           onConnect={() => setChooser(true)}
           send={async (amountNear, minOut) => {
@@ -246,7 +246,7 @@ function Inner({ children }: { children: React.ReactNode }) {
   );
 }
 
-type Payer = { kind: "near"; label: string } | { kind: "x"; label: string; balance: number | null } | null;
+type Payer = { kind: "near"; label: string; device?: boolean } | { kind: "x"; label: string; balance: number | null } | null;
 
 function BuySheet({ coin, initial, payer, onClose, onConnect, send, onError }: {
   coin: Coin; initial?: number; payer: Payer; onClose: () => void; onConnect: () => void;
@@ -309,7 +309,7 @@ function BuySheet({ coin, initial, payer, onClose, onConnect, send, onError }: {
           {payer && <div className="flex justify-between"><dt>Paid from</dt><dd className="num font-semibold">{payer.kind === "near" ? payer.label : `${payer.label} · NME balance ${payer.balance === null ? "…" : compact(payer.balance)} NEAR`}</dd></div>}
         </dl>
         <p className="mt-4 rounded-xl bg-paper-2 p-3 text-xs leading-relaxed text-ink-2">
-          The coin itself never charges a tax and can never block you from selling. You sign this in your own wallet; the price can move up to 3% before it fails.
+          The coin itself never charges a tax and can never block you from selling. {payer?.kind === "near" && payer.device ? "Signed instantly on this device, no wallet needed" : "You sign this in your own wallet"}; the price can move up to 3% before it fails.
         </p>
         <div className="mt-5 flex gap-3">
           <button className="btn flex-1 bg-paper" onClick={onClose}>Cancel</button>
@@ -318,7 +318,7 @@ function BuySheet({ coin, initial, payer, onClose, onConnect, send, onError }: {
               setBusy(true);
               try { await send(n, minOut!); } catch (e) { onError(e); } finally { setBusy(false); }
             }}>
-              {busy ? "Waiting for wallet…" : short ? "Top up your NME balance first" : `Buy for ${valid ? n : "–"} NEAR`}
+              {busy ? (payer?.kind === "near" && payer.device ? "Buying…" : "Waiting for wallet…") : short ? "Top up your NME balance first" : `Buy for ${valid ? n : "–"} NEAR`}
             </button>
           ) : (
             <button className="btn flex-[2] bg-mint" onClick={onConnect}>Connect a wallet</button>
