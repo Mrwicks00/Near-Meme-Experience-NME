@@ -21,7 +21,10 @@ export function Footer() {
           <p className="mt-3 text-cream/80">Photos: Wikimedia Commons (public domain, CC0, CC BY, CC BY-SA). Full list in <code>web/public/img/CREDITS.md</code>.</p>
         </div>
       </div>
-      <p aria-hidden className="select-none px-2 pb-2 text-center font-display text-[31vw] leading-[0.72] tracking-[-0.04em] text-cream">nme</p>
+      <div className="flex justify-center px-4 pb-6">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/nme-logo-512.png" alt="NME: a derpy frog gladiator holding a red candle sword" width={512} height={532} className="h-auto w-[min(78vw,420px)] select-none drop-shadow-[0_18px_30px_rgba(0,0,0,0.45)]" />
+      </div>
     </footer>
   );
 }

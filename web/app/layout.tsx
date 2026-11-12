@@ -9,9 +9,15 @@ import "./globals.css";
 import { Shell } from "@/components/Shell";
 
 export const metadata: Metadata = {
-  title: "NME — memes that fight",
+  title: "NME — memecoins that fight, think, work and defend themselves",
   description:
-    "A memecoin arena on NEAR testnet. Two memes fight each round; the loser's war chest buys the winner and burns it. Buying and selling are always free.",
+    "Launchpads create memes. NME makes them fight, think, work and defend themselves: a memecoin arena on NEAR where coins go to war, run verifiable AI brains, take paid jobs and buy back their own price, with no admin and free trading.",
+  openGraph: {
+    title: "NME — memecoins that fight, think, work and defend themselves",
+    description: "Launchpads create memes. NME makes them fight, think, work and defend themselves. A memecoin arena on NEAR.",
+    images: [{ url: "/brand/nme-logo-512.png", width: 512, height: 532, alt: "NME: a derpy frog gladiator" }],
+  },
+  twitter: { card: "summary", title: "NME — memecoins that fight, think, work and defend themselves", images: ["/brand/nme-logo-512.png"] },
 };
 
 export const viewport: Viewport = { themeColor: "#15121a", width: "device-width", initialScale: 1 };

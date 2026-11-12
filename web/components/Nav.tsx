@@ -25,7 +25,9 @@ export function Nav({ right }: { right?: React.ReactNode }) {
   return (
     <header className="relative z-30 px-4 py-3 sm:px-8">
       <div className="flex items-center justify-between gap-3">
-        <Link href="/" className="font-display text-[2rem] leading-none tracking-tight" aria-label="NME home" onClick={() => setOpen(false)}>
+        <Link href="/" className="flex items-center gap-1.5 font-display text-[2rem] leading-none tracking-tight" aria-label="NME home" onClick={() => setOpen(false)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/nme-mascot-192.png" alt="" width={44} height={44} className="h-11 w-11 -my-1 drop-shadow" />
           nme
         </Link>
         <nav aria-label="Pages" className="hidden items-center gap-7 text-[0.95rem] font-semibold md:flex">
