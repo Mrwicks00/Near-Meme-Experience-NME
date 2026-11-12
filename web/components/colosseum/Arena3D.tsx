@@ -1,7 +1,8 @@
 "use client";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Edges, Environment, Html, OrbitControls, useTexture } from "@react-three/drei";
+import { Edges, Environment, Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 
 const INK = "#171717";
@@ -63,55 +64,79 @@ function useSurface(name: "stone" | "sand", repeat: [number, number]) {
   }, [t, repeat]);
 }
 
-/** Stepped stone bowl: the seating tiers, then the arcade on top. */
+/** The bowl is a real model ("Colosseum" by Vladyslav Holhanov, CC-BY-4.0, Sketchfab), compressed to ~240 KB.
+ *  Model units: arena wall at r 172-176, seating tiers from r 178 (y -25) to r 246 (y 21), outer wall to y 47, floor y -47. */
+const BOWL_SCALE = 0.05;
+const BOWL_FLOOR = 47;
+/** Height of the tier surface at model radius `rm`, in scene units. */
+const tierY = (rm: number) => (-24 + (rm - 178) * 0.69 + BOWL_FLOOR) * BOWL_SCALE;
+
+/** The model has no UVs: give every face a box projection (by its normal) so the stone texture wraps it, in model units.
+ *  Its own flat arena floor (faces centred inside r 165, near the bottom) is dropped so our sand shows. */
+function boxUv(src: THREE.BufferGeometry, tile: number, world: THREE.Matrix4): THREE.BufferGeometry {
+  const flat = src.index ? src.toNonIndexed() : src.clone();
+  const all = flat.getAttribute("position");
+  const keep: number[] = [];
+  const l = new THREE.Vector3(), w = new THREE.Vector3();
+  for (let i = 0; i < all.count; i += 3) {
+    let x = 0, y = 0, z = 0;
+    for (let k = 0; k < 3; k++) { w.fromBufferAttribute(all, i + k).applyMatrix4(world); x += w.x / 3; y += w.y / 3; z += w.z / 3; }
+    if (Math.hypot(x, z) < 165 && y < -40) continue;
+    // fromBufferAttribute decodes the compressed (quantized) positions; the raw array would not
+    for (let k = 0; k < 3; k++) { l.fromBufferAttribute(all, i + k); keep.push(l.x, l.y, l.z); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(keep, 3));
+  const pos = g.getAttribute("position");
+  const uv = new Float32Array(pos.count * 2);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3(), e = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+    n.subVectors(c, b).cross(e.subVectors(a, b));
+    const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+    for (let k = 0; k < 3; k++) {
+      const p = k === 0 ? a : k === 1 ? b : c;
+      const [u, v] = ay >= ax && ay >= az ? [p.x, p.z] : ax >= az ? [p.z, p.y] : [p.x, p.y];
+      uv[(i + k) * 2] = u / tile;
+      uv[(i + k) * 2 + 1] = v / tile;
+    }
+  }
+  g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  g.computeVertexNormals(); // non-indexed: flat normals per face, so the normal map reads as cut blocks
+  return g;
+}
+
+function Bowl() {
+  const { scene } = useGLTF("/arena/colosseum.glb");
+  const stone = useSurface("stone", useMemo(() => [1, 1], []));
+  const obj = useMemo(() => {
+    const c = scene.clone(true);
+    // Real travertine (CC0, Poly Haven), warm tint, catches the low sun.
+    const mat = new THREE.MeshStandardMaterial({ ...stone, color: "#d9c3a0", roughness: 1, metalness: 0, side: THREE.DoubleSide });
+    mat.normalScale.set(1.2, 1.2);
+    c.updateMatrixWorld(true);
+    c.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.geometry = boxUv(m.geometry, 24, m.matrixWorld); // one texture tile per ~1.2 scene units
+      m.material = mat;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    return c;
+  }, [scene, stone]);
+  return <primitive object={obj} scale={BOWL_SCALE} position={[0, BOWL_FLOOR * BOWL_SCALE, 0]} />;
+}
+useGLTF.preload("/arena/colosseum.glb");
+
+/** The Colosseum around the sand: the real model's stands and walls. */
 function Stadium() {
-  const bowl = useSurface("stone", useMemo(() => [24, 3], []));
-  const pier = useSurface("stone", useMemo(() => [0.6, 1.4], []));
   const sand = useSurface("sand", useMemo(() => [5, 5], []));
-  const lathe = useMemo(() => {
-    const pts: THREE.Vector2[] = [new THREE.Vector2(8.4, 0), new THREE.Vector2(8.4, 0.9)];
-    for (let i = 0; i < 8; i++) {
-      const r = 8.4 + i * 1.05, y = 0.9 + i * 0.72;
-      pts.push(new THREE.Vector2(r + 1.05, y), new THREE.Vector2(r + 1.05, y + 0.72));
-    }
-    pts.push(new THREE.Vector2(17.5, 6.66), new THREE.Vector2(17.5, 0));
-    return new THREE.LatheGeometry(pts, 96);
-  }, []);
-  const arches = useMemo(() => {
-    const out: { pos: [number, number, number]; rot: number }[] = [];
-    const n = 44;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      out.push({ pos: [Math.cos(a) * 17.1, 7.9, Math.sin(a) * 17.1], rot: -a + Math.PI / 2 });
-    }
-    return out;
-  }, []);
   return (
     <group>
-      <mesh geometry={lathe} receiveShadow>
-        <meshStandardMaterial {...bowl} color="#d9cbb4" side={THREE.DoubleSide} />
-      </mesh>
-      {/* the arena wall the fighters stand inside */}
-      <mesh position={[0, 0.45, 0]}>
-        <cylinderGeometry args={[8.33, 8.33, 0.9, 96, 1, true]} />
-        <meshStandardMaterial {...pier} color="#b98a6e" side={THREE.DoubleSide} />
-      </mesh>
-      {arches.map((p, i) => (
-        <group key={i} position={p.pos} rotation={[0, p.rot, 0]}>
-          {[-1, 1].map((x) => (
-            <mesh key={x} position={[x, 0, 0]} castShadow>
-              <boxGeometry args={[0.5, 2.6, 0.7]} />
-              <meshStandardMaterial {...pier} color="#cdbca3" />
-            </mesh>
-          ))}
-          <mesh position={[0, 1.45, 0]} castShadow>
-            <boxGeometry args={[2.55, 0.4, 0.7]} />
-            <meshStandardMaterial {...pier} color="#d9cbb4" />
-          </mesh>
-        </group>
-      ))}
+      <Bowl />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <circleGeometry args={[8.4, 96]} />
+        <circleGeometry args={[8.9, 96]} />
         <meshStandardMaterial {...sand} color="#e8cf9e" />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
@@ -122,14 +147,16 @@ function Stadium() {
   );
 }
 
-/** ~600 fans on the tiers. Red-corner fans sit on the left, blue on the right; each half jumps when its fighter lands a hit. */
-function Crowd({ shared }: { shared: React.RefObject<Shared> }) {
-  const body = useRef<THREE.InstancedMesh>(null);
-  const head = useRef<THREE.InstancedMesh>(null);
-  const seats = useMemo(() => {
-    const out: { x: number; y: number; z: number; side: "a" | "b" | "n"; ph: number; sp: number }[] = [];
-    for (let row = 0; row < 8; row++) {
-      const r = 8.4 + row * 1.05 + 0.6, y = 0.9 + row * 0.72;
+/** ~500 fans on the tiers. Red-corner fans sit on the left, blue on the right; each half jumps when its fighter lands a hit. */
+type Seat = { x: number; y: number; z: number; side: "a" | "b" | "n"; ph: number; sp: number; row: number };
+
+/** Every seat of the bowl (same layout for the cheap crowd and the real fans). */
+function useSeats(): Seat[] {
+  return useMemo(() => {
+    const out: Seat[] = [];
+    for (let row = 0; row < 6; row++) {
+      const rm = 181 + row * 12.4; // one row per ~0.62 scene units up the model's tiers
+      const r = rm * BOWL_SCALE, y = tierY(rm);
       const n = Math.floor(2 * Math.PI * r / 0.78);
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + row * 0.13;
@@ -138,11 +165,95 @@ function Crowd({ shared }: { shared: React.RefObject<Shared> }) {
         const k = row * 1000 + i;
         if (rand(k) < 0.12) continue;             // empty seats
         const side = Math.abs(x) < 1.2 ? "n" : x < 0 ? "a" : "b";
-        out.push({ x, y, z, side, ph: rand(k + 0.5) * 6.28, sp: 0.6 + rand(k + 0.7) * 0.8 });
+        out.push({ x, y, z, side, ph: rand(k + 0.5) * 6.28, sp: 0.6 + rand(k + 0.7) * 0.8, row });
       }
     }
     return out;
   }, []);
+}
+
+/** The seats the camera sees best (front rows, far side, every other one): real animated fans sit there. */
+function realSeats(all: Seat[], max: number): Set<number> {
+  const picks = all
+    .map((s, i) => ({ s, i }))
+    .filter(({ s, i }) => s.row <= 2 && s.z < -2.5 && Math.abs(s.x) < 9 && i % 2 === 0)
+    .sort((p, q) => p.s.row - q.s.row || Math.abs(p.s.x) - Math.abs(q.s.x))
+    .slice(0, max);
+  return new Set(picks.map((p) => p.i));
+}
+
+/** Real people (Mixamo "Remy", "Sitting Clap") in the best seats; each claps harder when its coin lands a hit. */
+type Fan = { obj: THREE.Object3D; mixer: THREE.AnimationMixer; action: THREE.AnimationAction; side: "a" | "b" | "n"; base: number };
+function RealFans({ seats, shared }: { seats: Seat[]; shared: React.RefObject<Shared> }) {
+  const gltf = useGLTF("/arena/fan.glb");
+  const group = useRef<THREE.Group>(null);
+  const fans = useRef<Fan[]>([]);
+
+  // Built imperatively: three.js objects that animate every frame, owned by this component.
+  useEffect(() => {
+    const g = group.current;
+    if (!g) return;
+    // Size from the meshes' bind-pose bounds (never through the skeleton, so a bad rig can't break the page).
+    gltf.scene.updateMatrixWorld(true);
+    const box = new THREE.Box3();
+    gltf.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.geometry) return;
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      if (m.geometry.boundingBox) box.union(m.geometry.boundingBox.clone().applyMatrix4(m.matrixWorld));
+    });
+    const h = box.isEmpty() ? 0 : box.max.y - box.min.y;
+    if (!gltf.animations[0] || h <= 0) return; // nothing usable: keep the cheap crowd only
+    const scale = 1.05 / h;
+    const tint = { a: new THREE.Color(RED), b: new THREE.Color(BLUE), n: new THREE.Color(PAPER) };
+    const clip = gltf.animations[0];
+    const list: Fan[] = seats.map((s, i) => {
+      const obj = cloneSkinned(gltf.scene);
+      obj.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.frustumCulled = false; // skinned meshes move outside their bind box
+        if (/Tops/i.test(m.name) && m.material) {
+          const mat = (m.material as THREE.MeshStandardMaterial).clone();
+          mat.color = tint[s.side].clone();
+          m.material = mat;
+        }
+      });
+      obj.scale.setScalar(scale);
+      obj.position.set(s.x, s.y - 0.12, s.z);
+      obj.rotation.set(0, Math.atan2(-s.x, -s.z), 0);
+      const mixer = new THREE.AnimationMixer(obj);
+      const action = mixer.clipAction(clip);
+      action.play();
+      if (clip) action.time = rand(i + 9) * clip.duration;
+      g.add(obj);
+      return { obj, mixer, action, side: s.side, base: 0.85 + rand(i + 3) * 0.3 };
+    });
+    fans.current = list;
+    return () => {
+      for (const f of list) { f.mixer.stopAllAction(); g.remove(f.obj); }
+      fans.current = [];
+    };
+  }, [gltf, seats]);
+
+  useFrame((_, dt) => {
+    const sh = shared.current;
+    for (const f of fans.current) {
+      const since = f.side === "n" ? Math.min(now() - sh.hitAt.a, now() - sh.hitAt.b) : now() - sh.hitAt[f.side];
+      const hype = Math.max(0, 1 - since / 1600);
+      f.action.setEffectiveTimeScale(f.base * (1 + hype * 1.6));
+      f.mixer.update(Math.min(dt, 0.05));
+    }
+  });
+
+  return <group ref={group} />;
+}
+useGLTF.preload("/arena/fan.glb");
+
+function Crowd({ shared, all, skip }: { shared: React.RefObject<Shared>; all: Seat[]; skip: Set<number> }) {
+  const body = useRef<THREE.InstancedMesh>(null);
+  const head = useRef<THREE.InstancedMesh>(null);
+  const seats = useMemo(() => all.filter((_, i) => !skip.has(i)), [all, skip]);
 
   useEffect(() => {
     const c = new THREE.Color();
@@ -379,8 +490,11 @@ export default function Arena3D({ a, b, hits, outcome, practice }: { a: Fighter;
     else Object.assign(shared.current, { loser: null, voidAt: now() });
   }, [outcome]);
 
-  // Phones: no shadow maps (the sky and the textures carry the look).
+  // Phones: no shadow maps (the sky and the textures carry the look) and fewer real fans.
   const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+  const seats = useSeats();
+  const fanIdx = useMemo(() => realSeats(seats, mobile ? 12 : 36), [seats, mobile]);
+  const fanSeats = useMemo(() => seats.filter((_, i) => fanIdx.has(i)), [seats, fanIdx]);
 
   // A new pair of fighters starts fresh.
   useEffect(() => {
@@ -400,7 +514,10 @@ export default function Arena3D({ a, b, hits, outcome, practice }: { a: Fighter;
       <Suspense fallback={null}>
         <Stadium />
       </Suspense>
-      <Crowd shared={shared} />
+      <Suspense fallback={null}>
+        <RealFans seats={fanSeats} shared={shared} />
+      </Suspense>
+      <Crowd shared={shared} all={seats} skip={fanIdx} />
       <Brawler side="a" fighter={a} shared={shared} />
       <Brawler side="b" fighter={b} shared={shared} />
       {hits.slice(-3).map((h, i) => (

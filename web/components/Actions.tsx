@@ -1,6 +1,6 @@
 "use client";
 import { playAccount, playCall, playSignOut } from "@/lib/play";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { NearProvider, useNearWallet } from "near-connect-hooks";
 import { NME } from "@/lib/config";
 import { view } from "@/lib/rpc";
@@ -337,9 +337,13 @@ export function Actions({ children }: { children: React.ReactNode }) {
   );
 }
 
+const noop = () => () => {};
+
 export function WalletButton() {
   const { account, x, xNear, connect } = useActions();
-  const label = account
+  // Wallets come from this browser's storage: render the label only after hydration (the server can't know it).
+  const mounted = useSyncExternalStore(noop, () => true, () => false);
+  const label = !mounted ? null : account
     ? account.length > 20 ? account.slice(0, 14) + "…" : account
     : x ? `${walletName(x)} · ${xNear === null ? "…" : compact(xNear)} Ⓝ` : null;
   return (
