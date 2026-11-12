@@ -26,6 +26,8 @@ export type Coin = {
   icon: string | null;
   native: boolean;
   creator?: string;
+  /** For coins launched from Phantom / MetaMask (creator = the gateway): the wallet that launched it, `sol:<pk>` / `evm:<0x…>`. */
+  creatorWallet?: string;
   createdMs?: number;
   vibe?: string;
   rivals?: string[];
@@ -76,6 +78,7 @@ export async function loadCoin(keyIn: string, rec?: CoinRecord, lenient = false)
     icon: meta?.icon ?? null,
     native,
     creator: summary?.creator ?? rec?.creator,
+    creatorWallet: (summary?.creator ?? rec?.creator) === NME.gateway ? (await launchWallet(key)) ?? undefined : undefined,
     createdMs: rec?.created_ms,
     vibe: summary?.persona.vibe,
     rivals: summary?.persona.rivals,
@@ -226,8 +229,36 @@ export function bagState(c: CrownStatus, now: number): BagState {
 }
 export const BAG_TONE: Record<BagState["tone"], string> = { ok: "bg-lime text-ink", soon: "bg-yolk text-ink", due: "bg-red text-cream", gone: "bg-paper text-ink" };
 
-/** A creator or holder account, in words: the gateway holds bags for Phantom / MetaMask wallets. */
-export const holderName = (acct?: string | null) => (!acct ? "–" : acct === NME.gateway ? "a Phantom / MetaMask wallet" : acct);
+// The wallet that launched a coin through the gateway never changes: read it once per session.
+const launchCache = new Map<string, Promise<string | null>>();
+function launchWallet(key: string): Promise<string | null> {
+  if (!launchCache.has(key)) {
+    const p = view<{ owner: string } | null>(NME.gateway, "get_launch", { ticker: key }).then((l) => l?.owner ?? null).catch(() => null);
+    launchCache.set(key, p);
+    p.then((v) => { if (v === null) launchCache.delete(key); });
+  }
+  return launchCache.get(key)!;
+}
+
+export type WalletLabel = { kind: string; short: string; full: string; href: string };
+/** Names an account exactly: a NEAR account, a Phantom (Solana) key or a MetaMask (Ethereum) address. */
+export function walletLabel(acct?: string | null): WalletLabel | null {
+  if (!acct) return null;
+  if (acct.startsWith("sol:")) {
+    const k = acct.slice(4);
+    return { kind: "Phantom (Solana)", short: `${k.slice(0, 4)}…${k.slice(-4)}`, full: k, href: `https://explorer.solana.com/address/${k}?cluster=devnet` };
+  }
+  if (acct.startsWith("evm:")) {
+    const a = acct.slice(4);
+    return { kind: "MetaMask (Ethereum)", short: `${a.slice(0, 6)}…${a.slice(-4)}`, full: a, href: `https://sepolia.etherscan.io/address/${a}` };
+  }
+  return { kind: "NEAR", short: acct, full: acct, href: `${NME.explorer}/address/${acct}` };
+}
+/** Plain-text version for tight spots (cards). */
+export const holderName = (acct?: string | null) => {
+  const w = walletLabel(acct);
+  return !w ? "–" : w.kind === "NEAR" ? w.short : `${w.kind} ${w.short}`;
+};
 
 export const loadCrown = (ticker: string) => view<CrownStatus | null>(NME.crown, "crown_status", { token_id: ticker });
 export const loadDefenseConfig = () => view<DefenseConfig>(NME.arena, "get_defense_config");

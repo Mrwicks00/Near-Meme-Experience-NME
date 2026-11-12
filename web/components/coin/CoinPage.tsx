@@ -6,7 +6,7 @@ import { accessKeyCount, view } from "@/lib/rpc";
 import { ago, compact, near, scale } from "@/lib/format";
 import { useCoins, useFeed, useNow, usePolled } from "@/lib/hooks";
 import {
-  Coin, CrownStatus, DefenseConfig, DefenseState, Delivery, JOB_KINDS, describe, bagState, BAG_TONE, holderName, timeLeft,
+  Coin, CrownStatus, DefenseConfig, DefenseState, Delivery, JOB_KINDS, describe, bagState, BAG_TONE, holderName, timeLeft, walletLabel,
   prettyText, loadBalance, loadCoin, loadCrown, loadDefenseConfig, loadDefenseState, loadDeliveries, loadJobPrice, pendingBurns, quoteSell,
 } from "@/lib/nme";
 import { CoinIcon, useIconTint } from "../CoinIcon";
@@ -208,11 +208,24 @@ function Defense({ coin, cfg, st }: { coin: Coin; cfg: DefenseConfig | null; st:
 function CreatorLine({ coin, crown }: { coin: Coin; crown: CrownStatus | null }) {
   const now = useNow(30000);
   const st = crown && now ? bagState(crown, now) : null;
-  const sold = crown && coin.creator && crown.owner !== coin.creator;
+  // Bags of wallet-launched coins sit at the gateway for a Phantom / MetaMask key: name that key, not the gateway.
+  const viaGw = crown?.owner === NME.gateway;
+  const gwHolder = usePolled(viaGw ? () => crownOwnerOf(coin.key) : null, 0, [viaGw, coin.key]).data;
+  const creator = walletLabel(coin.creatorWallet ?? coin.creator);
+  const holderAcct = viaGw ? gwHolder : crown?.owner;
+  const holder = walletLabel(holderAcct);
+  const sold = !!holderAcct && holderAcct !== (coin.creatorWallet ?? coin.creator);
   return (
     <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-      <span>Created by <a className="font-semibold underline" href={`${NME.explorer}/address/${coin.creator}`} target="_blank" rel="noreferrer">{holderName(coin.creator)}</a></span>
-      {sold && <span>· PumpBag now held by <strong>{holderName(crown!.owner)}</strong></span>}
+      {creator && (
+        <span>
+          Created by {creator.kind !== "NEAR" && <span>{creator.kind} </span>}
+          <a className="font-semibold underline" href={creator.href} target="_blank" rel="noreferrer" title={creator.full}>{creator.short}</a>
+        </span>
+      )}
+      {sold && holder && (
+        <span>· PumpBag now held by {holder.kind !== "NEAR" && <span>{holder.kind} </span>}<a className="font-semibold underline" href={holder.href} target="_blank" rel="noreferrer" title={holder.full}>{holder.short}</a></span>
+      )}
       {st && <span className={`chip ${BAG_TONE[st.tone]}`}>{st.tone === "gone" ? "creator bag forfeited" : st.tone === "due" ? "creator inactive" : "creator active"}</span>}
     </p>
   );
@@ -221,17 +234,19 @@ function CreatorLine({ coin, crown }: { coin: Coin; crown: CrownStatus | null })
 export function PumpBag({ coin, crown, xOwner }: { coin: Coin; crown: CrownStatus | null; xOwner: string | null }) {
   const { account, x, call, act } = useActions();
   const now = useNow(30000);
+  const gwOwner = usePolled(crown?.owner === NME.gateway ? () => crownOwnerOf(coin.key) : null, 0, [crown?.owner, coin.key]).data;
   if (!crown) return null;
   // A wallet-launched coin's PumpBag is held by the gateway for the wallet key that launched it (D-59).
   const viaGateway = !!x && crown.owner === NME.gateway && xOwner === x.owner;
   const mine = account === crown.owner || viaGateway;
   const canForfeit = !crown.forfeited && now > crown.forfeitable_after_ms;
   const st = bagState(crown, now);
+  const ownerName = crown.owner === NME.gateway ? holderName(gwOwner ?? undefined) : crown.owner;
   return (
     <Panel tone="bg-paper" kicker="pumpbag" title="The creator's bag">
       <p className="text-[1.02rem] leading-relaxed">The creator&apos;s 5% sits in a vault and vests over time, never in a free wallet. If the owner goes quiet too long, anyone can forfeit the bag: the unvested part is burned.</p>
       <dl className="mt-5 space-y-2 text-sm">
-        <div className="flex justify-between gap-4"><dt>Owner</dt><dd className="truncate font-semibold">{viaGateway ? `held for your ${walletName(x!)} wallet` : crown.owner}{mine && " (you)"}</dd></div>
+        <div className="flex justify-between gap-4"><dt>Owner</dt><dd className="truncate font-semibold">{viaGateway ? `held for your ${walletName(x!)} wallet` : ownerName}{mine && " (you)"}</dd></div>
         <div className="flex justify-between gap-4"><dt>Vault</dt><dd className="truncate"><a className="underline" href={`${NME.explorer}/address/${crown.vault}`} target="_blank" rel="noreferrer">{crown.vault}</a></dd></div>
         <div className="flex justify-between gap-4"><dt>Last heartbeat</dt><dd>{crown.last_heartbeat_ms ? ago(crown.last_heartbeat_ms, now) : "–"}</dd></div>
         <div className="flex justify-between gap-4"><dt>Must check in every</dt><dd>{timeLeft(crown.inactivity_ms)}</dd></div>

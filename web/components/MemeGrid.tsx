@@ -24,7 +24,7 @@ function Card({ coin, fighting, flash }: { coin: Coin; fighting: boolean; flash?
             <Link href={`/coin/${encodeURIComponent(coin.key)}`} className="after:absolute after:inset-0 hover:underline">${coin.ticker}</Link>
           </h3>
           <p className="mt-1 truncate text-sm text-ink-2">{coin.name}{coin.vibe ? ` — ${coin.vibe}` : ""}</p>
-          <p className="mt-0.5 truncate text-xs text-ink-2">{coin.native ? `by ${holderName(coin.creator)}` : "outside fighter"}</p>
+          <p className="mt-0.5 truncate text-xs text-ink-2">{coin.native ? `by ${holderName(coin.creatorWallet ?? coin.creator)}` : "outside fighter"}</p>
         </div>
         <dl className="num grid grid-cols-3 gap-2 text-[0.8rem]">
           <div><dt className="text-ink-2">Price</dt><dd className="font-bold">{coin.priceNear !== null ? `${compact(coin.priceNear)} Ⓝ` : "–"}</dd></div>
