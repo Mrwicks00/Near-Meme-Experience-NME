@@ -1,0 +1,134 @@
+{
+  "obsolete_burned": {
+    "note": "Published on 2026-11-06 by an interrupted run of the OLD batch-launch deploy script (design superseded by docs/11-CORE-PIVOT.md). ~37.2 NEAR of testnet faucet money burned; these hashes are unused.",
+    "hashes": {
+      "8ee88c9d991840f7d2ab679ffe5968cb05146a14bd7ffcb1de155039e4e98c68": "coin",
+      "b0e8fd937bb019105c2529be423b9c262d264ad24732d6eb83a947a7b53099ff": "vault"
+    }
+  },
+  "published": {
+    "d1a2d59c966a8061687115ecf1dc1680c3b811ec4ef002e42d083216126f3cd8": "coin",
+    "5cf96b8b35048228d07e165ddc3708a3a26800752a2200a0d996c06688f5dc97": "vault"
+  },
+  "network": "testnet",
+  "accounts": {
+    "factory": "nme.testnet",
+    "arena": "arena.nme.testnet",
+    "crown": "crown.nme.testnet",
+    "wrap": "wrap.testnet",
+    "dcl": "dclv2.ref-dev.testnet",
+    "publisher": "nme-pub.testnet",
+    "graveyard": "burn.nme.testnet"
+  },
+  "code": {
+    "coin_sha256": "d1a2d59c966a8061687115ecf1dc1680c3b811ec4ef002e42d083216126f3cd8",
+    "coin_b58": "F7LDnVRHVdaALZ27b9QZqiVZTryzdPbcPNQ5ERJFmZVZ",
+    "vault_sha256": "5cf96b8b35048228d07e165ddc3708a3a26800752a2200a0d996c06688f5dc97",
+    "vault_b58": "7Fw6bvbLGR9hqYwekC6ATWapQ83DG2pUudd3sf77ojyp"
+  },
+  "coins": {
+    "pepe": {
+      "account": "pepe.nme.testnet",
+      "vault": "crown.pepe.nme.testnet",
+      "pool_id": "pepe.nme.testnet|wrap.testnet|10000",
+      "lpt_id": "pepe.nme.testnet|wrap.testnet|10000#2559",
+      "creator": "nme-alice.testnet",
+      "first_buy_tokens": 300,
+      "txs": {
+        "create_coin": "5NEK3RMNdhNpGBs4H6BYt3ePmSC1VRWrfPaButgkShwM",
+        "launch_1": "9B3jDrysBxy3XZZ9wRmRwQDCPj7aYFrw4HTJDpgWCp5s",
+        "launch_2": "BNfTgCVLRpAbbJJ9aH1QS76cH5xTU2EmMkSoxQp9jBzi",
+        "dcl_buy": "2YkrWghLUyMASAPZa3qRTe9n6KKDizg8ZN7CKGGTYqKV",
+        "dcl_sell": "FDb3rp6HEJMjEdfWtT98UX2XAh2iFEvtpuhnRTTavNyz",
+        "claim_fees": "CCqZZHm2PSMDa24o282PjGrKuKASZAHsw4AxaTz7WsSq"
+      }
+    }
+  },
+  "outside": {
+    "batman": {
+      "account": "nme-batman.testnet",
+      "pool_id": "nme-batman.testnet|wrap.testnet|10000",
+      "note": "plain NEP-141 (spike launcher code, not the NME factory); pool NEAR side ~1.5 wNEAR",
+      "txs": {
+        "launch": "2abLwEX6eXbSBXxmjT86c3YkPvB6CzAbwM79tycBx9Uz",
+        "seed_swap": "6ooK35bEdeZdBBvouTj3Nvus25ogCeFKCGnkSgGeJGVm",
+        "enlist": "CunCs2LcfxCKtHVexD2gMy1yZTimefxKvzRjiRiMNe6W"
+      }
+    }
+  },
+  "arena_version": "v10.3 (migrate_brain 2026-11-11, tx E9d74r9ajYKhxCEpCZJu71q8Ls71DY3GMV573ma2sLTK: worker 1264096a\u2026 with a 75 s time budget; earlier pin tx 14hPeJCn34FHcUoeoMWZ765xEiq1md5Hvzh5cwK5ecwk: worker e60add25\u2026, Qwen3.6-35B-A3B thinking off; migrate_rpc tx 7i3JEYy5szaaKi4PGrgZF61MGRLappwNxzrDBTp6rrkc: rpc drpc; v10 deployed 2026-11-09, tx 5iqSAfRD9uidnLb9ffx2LGknkCTH42m9HvHCWmtAEADk)",
+  "wars": {
+    "round2_pepe_vs_batman": {
+      "start_round": "EYkwHhGnv3XWZ7wzjXACyZGDA18gfmBY1mdrjLF5mr8N",
+      "alice_sells": "5VB6NcDxzRW7Aho3okTxmCBYNCNoyQf3BfYGcyQBKdnM",
+      "settle_round": "9qSSgasnABRma6rvd25QesLj6SJa1QuVKmjH5uQnXKqG",
+      "result": "pepe won; 24.5 pepe burned; batman chest -0.25 NEAR"
+    },
+    "migrate_m3": "Ejq2CkLpFqESZUfThJ38df4ttsaU7RdRrjz2Vt3opH8i"
+  },
+  "autonomy": {
+    "migrate_m8": "398GxVg71bgRPknmdwuA68j1HTYJF43mdzLKJjwUdRWv",
+    "round3_tick_start": "HjYG3VJNjPjYWxPogbs9M7psDDcuGoTDXNx2KTQHRXza",
+    "round3_tick_settle_and_start_round4": "BkzxTbB8qMknHkFC4pFefmt6PaVGJru2LwGm3zNrk3QP",
+    "tick_claim_fees": "9TY5bpwp2Tf1gthAD2rYNoTBTo1R5LBn4gm3KkVvTczw",
+    "tick_void_round4_start_round5": "24CTuP9x73iCULdwLSsomzgw35BQaFw4eihLVraEtofM"
+  },
+  "brain": {
+    "worker_sha256": "1264096a11c14a04a9359d322ed311edf69ba6224a9ac60ab01ee8bd5a82fa68",
+    "operator_sha256": "d580862b418d09758f5c4e09a063ae07695ec2e98e110c6c310bc7b148b04a95",
+    "migrate_m5": "G9J6gjWYBugc8tMAmCQoF6xPzTCmzjqwBY5F4Qh4qEc1",
+    "job1_hire": "DcxC26Nnhsp7XkG6xwc3cY2yk77zGoBpqxhWDR34FdrW",
+    "job1_burn_tick": "FN5kXrc4Ji2wJBcP8X5vZhjubiDtPRER4VUfkG3XK1HF",
+    "migrate_m6": "ooRPLGdM2Xhr1ZzCrQbMsSpX4QTLGm4UVnSri23uq4U",
+    "migrate_commentary": "FQ63Bc3FUi39dPKVvTfe1yJx2AqR47ai6D8g8ZAmijpe",
+    "rpc_url": "https://near-testnet.drpc.org",
+    "migrate_rpc": "7i3JEYy5szaaKi4PGrgZF61MGRLappwNxzrDBTp6rrkc",
+    "model": "Qwen/Qwen3.6-35B-A3B-FP8 (thinking off)",
+    "migrate_brain": "E9d74r9ajYKhxCEpCZJu71q8Ls71DY3GMV573ma2sLTK",
+    "media_key": "nme-s4.testnet ed25519:6jrNKjp4roAtdngGwPH25iDfbMTebp36FSRZA2KWdNmZ (FastFS only, 1 NEAR allowance)"
+  },
+  "coins_extra": {
+    "frog": {
+      "account": "frog.nme.testnet",
+      "note": "shallow pool (start -30000): calm dip -> brain held"
+    },
+    "toad": {
+      "account": "toad.nme.testnet",
+      "note": "shallow pool (start -60000, range 2000): brain bought back 167 bps and burned 186,863 toad"
+    },
+    "froggy": {
+      "account": "froggy.nme.testnet",
+      "note": "launch by prompt (D-58), signed by nme-w1.testnet; txs F3WsQzzG3UYVV3c786FxApYTJu4cuMAseiV92NC8REmp, CSVUqU5w8Zr6PuFqfWk5dc32Pm5Riviupa7mJzUJPGZt"
+    },
+    "axolotl": {
+      "account": "axolotl.nme.testnet",
+      "note": "wallet-owned launch (D-59): signed by a throwaway Solana key, creator = gateway, PumpBag held for sol:89v8NbLSyGWtEs9aFzvBoQGHy7UTsCFfNUifNXNYPrUy; tx GE3GVWqXN6LDCp1SHxAvdqtdbYtarz5H7ZTiheBs2frS"
+    }
+  },
+  "pumpbag": {
+    "collection": "crown.nme.testnet",
+    "migrate_collection": "AEvJc4UdWTBYzn7nscrkut2MErK7nntrqYdk6mCGqS5j",
+    "migrate_arena": "3NYLUrdLpJLG9yQZQTMPodnxhrzNLgGnGg2rrRAjcnQ8",
+    "claim_fees": "D3MxGeHBYJqLVKhVWHePvMH1AJuhZqwXoiF752d4JxMM",
+    "claim_vested": "HdcPmyhCVkuYprc844rsTzo4JCNg7miQJdjwEYxMU1A2",
+    "note": "toad's PumpBag was forfeited by a tick; pepe and frog heartbeaten"
+  },
+  "gateway": {
+    "account": "gateway.nme.testnet",
+    "verifier_worker_sha256": "1bcab45bd561d74d0a236f3b0ee7aefbcb4d629ebefb67906ccfa8ad5a6a0332",
+    "claim": "8tuK9crzrV2hZxLjRVYrQ8Abkb9jdBmLGcR4yvjgVA6A",
+    "execute": "7CPqniEGCX8TMyzT2wNDQ9f3tfpNQMG6HnaaYDbG2Mfb",
+    "solana_tx": "5mkfv677EVWqTZrsDsdY9sMQQpraHtc2vFUx4GVWZfB5yCvyRfgghP6AxqA4hvAH7M8cxyCQ5Ca26NaEbWKBVEMd",
+    "note": "0.1 SOL from Phantom devnet -> 2.349 NEAR of PEPE for nme-alice.testnet",
+    "version": "v3 wallet launch (migrate_v3 2026-11-09, tx FsoHUtT8PRE1yWDyXuTWpBEvckyZLTxTYHEvAWFCVdcS)",
+    "factory": "nme.testnet",
+    "crown": "crown.nme.testnet",
+    "registered_on": [
+      "wrap.testnet",
+      "pepe.nme.testnet",
+      "frog.nme.testnet",
+      "toad.nme.testnet"
+    ]
+  },
+  "factory_version": "v2 (deployed 2026-11-09, tx HTW9LPjigpeuMT3TCDtNQEvsdRm8h7QJeWt4Vg2DJ3fa)"
+}

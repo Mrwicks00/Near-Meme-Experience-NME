@@ -1,0 +1,24 @@
+[package]
+name = "nme-deposit-verifier"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "NME deposit verifier (OutLayer WASI p2): checks a finalized Solana devnet transfer and prices it in NEAR from two sources"
+
+[[bin]]
+name = "nme-deposit-verifier"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasi-http-client = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

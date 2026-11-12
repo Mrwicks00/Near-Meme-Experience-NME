@@ -1,0 +1,32 @@
+[package]
+name = "nme-operator"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "NME Operator (OutLayer WASI p2): if the arena has a due task, sign and send `arena.tick` with a function-call-only key"
+
+[[bin]]
+name = "nme-operator"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ed25519-dalek = { version = "2.1", default-features = false, features = ["std"] }
+sha2 = "0.10"
+bs58 = "0.5"
+base64 = "0.22"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasi-http-client = "0.2"
+
+[dev-dependencies]
+near-primitives = "0.37"
+near-crypto = "0.37"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

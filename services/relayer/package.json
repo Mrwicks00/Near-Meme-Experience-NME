@@ -1,0 +1,23 @@
+{
+  "name": "nme-relayer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NME relayer: submits wallet-signed gateway actions and deposit claims, pays the gas. A courier only (D-57, I7): it can choose timing, never outcomes.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
+    "bs58": "6.0.0",
+    "near-api-js": "7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2"
+  }
+}

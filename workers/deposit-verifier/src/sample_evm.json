@@ -1,0 +1,17 @@
+{
+ "tx": {
+  "hash": "0x046df2e8282f349e034fc8c5c8ff8b7d873d0ff39aa9785f6ba19a44dc00f86e",
+  "to": "0x022bc100f8e4b973952247463f1b2c980849f88e",
+  "from": "0xca7ca0715cada94feed43eb2f8baa13fe35266d4",
+  "value": "0xe35fa931a0000",
+  "input": "0x",
+  "chainId": "0xaa36a7",
+  "blockNumber": "0xb87dd3"
+ },
+ "receipt": {
+  "status": "0x1",
+  "blockNumber": "0xb87dd3",
+  "transactionHash": "0x046df2e8282f349e034fc8c5c8ff8b7d873d0ff39aa9785f6ba19a44dc00f86e"
+ },
+ "finalized_number": 12090840
+}

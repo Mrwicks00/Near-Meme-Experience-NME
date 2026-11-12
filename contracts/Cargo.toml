@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = ["nme-common", "nme-factory", "nme-coin", "nme-crown", "nme-crown-vault", "nme-arena", "nme-gateway", "nme-it"]
+exclude = ["spikes/s2-factory", "spikes/s4-caller", "spikes/mock-outlayer", "spikes/s12-launcher"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.93"
+license = "MIT"
+
+[workspace.dependencies]
+near-sdk = "5.29"
+near-contract-standards = "5.29"
+nme-common = { path = "nme-common" }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+# Test builds pull in near-api/near-sandbox; keep them small (disk is tight).
+[profile.dev]
+debug = false

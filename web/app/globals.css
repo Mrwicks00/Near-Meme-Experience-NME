@@ -1,0 +1,281 @@
+@import "tailwindcss";
+
+/*
+  NME palette (dark). Every colour means exactly one thing, everywhere:
+  red   = red corner (fighter A) and war       blue  = blue corner (fighter B)
+  mint  = buy / money in                       yolk  = burn (supply destroyed)
+  lilac = AI (brains, always labelled)         lime  = launch / new memes
+  Each meaning colour comes in two forms with matched lightness, so the six read as one family on black:
+    <hue>       luminous accent (OKLCH L≈0.80, C≈0.12): chips, buttons, numbers, kickers. Text on it is near-black.
+    <hue>-deep  the same hue at L≈0.22: large blocks. Text on it is warm white; its kicker takes the accent.
+  Neutrals: paper = page, paper-2 = raised surface / inputs, night = deepest strips, ink = text, ink-2 = muted text,
+  line = hairlines and outlines, drop = shadow.
+*/
+@theme {
+  --color-paper: #111115;
+  --color-paper-2: #1b1b21;
+  --color-night: #09090c;
+  --color-ink: #ece8e1;
+  --color-ink-2: #9d988f;
+  --color-cream: #f4f0e8;
+  --color-line: rgb(255 255 255 / 0.13);
+  --color-drop: rgb(0 0 0 / 0.55);
+
+  --color-red: #f2735f;
+  --color-red-deep: #331713;
+  --color-blue: #829efe;
+  --color-blue-deep: #161f45;
+  --color-mint: #7fdca6;
+  --color-mint-deep: #0f2619;
+  --color-yolk: #f0c35c;
+  --color-yolk-deep: #2a200d;
+  --color-lilac: #b9a6f4;
+  --color-lilac-deep: #1d1730;
+  --color-lime: #d1df70;
+  --color-lime-deep: #20250e;
+
+  --font-display: "Bagel Fat One", "Arial Black", sans-serif;
+  --font-sans: "Schibsted Grotesk Variable", Helvetica, Arial, sans-serif;
+  --font-serif: "Newsreader Variable", Georgia, serif;
+  --font-black: "Pirata One", "Old English Text MT", serif;
+  --font-hand: "Sedgwick Ave Display", "Comic Sans MS", cursive;
+
+  --ease-punch: cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body {
+  background: var(--color-paper);
+  overflow-x: hidden;
+}
+::selection {
+  background: var(--color-yolk);
+  color: #141117;
+}
+:focus-visible {
+  outline: 3px solid var(--color-yolk);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Accent fills (chips, buttons): near-black text and outlines. */
+.bg-red, .bg-blue, .bg-mint, .bg-yolk, .bg-lime, .bg-lilac,
+.hover\:bg-mint:hover, .hover\:bg-yolk:hover, .hover\:bg-lime:hover, .hover\:bg-lilac:hover {
+  --color-ink: #121115;
+  --color-ink-2: #3c3940;
+  --color-line: rgb(0 0 0 / 0.28);
+  color: var(--color-ink);
+}
+/* Surfaces and deep blocks (including ones nested inside an accent): back to the light-on-dark set. */
+.bg-paper, .bg-paper-2, .bg-night,
+.bg-red-deep, .bg-blue-deep, .bg-mint-deep, .bg-yolk-deep, .bg-lilac-deep, .bg-lime-deep,
+[class~="bg-paper/70"], [class~="bg-night/50"], [class~="bg-night/75"], [class~="bg-night/85"] {
+  --color-ink: #ece8e1;
+  --color-ink-2: #9d988f;
+  --color-line: rgb(255 255 255 / 0.13);
+  color: var(--color-ink);
+}
+/* A deep block's outline and hand-lettered kicker take its accent. */
+.bg-red-deep { border-color: rgb(242 115 95 / 0.35); --kick: var(--color-red); }
+.bg-blue-deep { border-color: rgb(130 158 254 / 0.35); --kick: var(--color-blue); }
+.bg-mint-deep { border-color: rgb(127 220 166 / 0.3); --kick: var(--color-mint); }
+.bg-yolk-deep { border-color: rgb(240 195 92 / 0.3); --kick: var(--color-yolk); }
+.bg-lilac-deep { border-color: rgb(185 166 244 / 0.32); --kick: var(--color-lilac); }
+.bg-lime-deep { border-color: rgb(209 223 112 / 0.3); --kick: var(--color-lime); }
+[class*="-deep"] .font-hand { color: var(--kick, var(--color-ink)); }
+/* Outlines are hairlines everywhere, not drawn strokes. */
+.border-ink { border-color: var(--color-line); }
+
+/* Scrollbars: thin, no arrows, a warm thumb on an invisible track; brighter while you use it. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(236 232 225 / 0.22) transparent;
+}
+*:hover {
+  scrollbar-color: rgb(236 232 225 / 0.4) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(236 232 225 / 0.2);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(236 232 225 / 0.42);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-corner {
+  display: none;
+  background: transparent;
+}
+
+/* Plain figures: Schibsted's numeric features add stray space around "." and "," in Chrome. */
+.num {
+  font-variant-numeric: normal;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Halftone print texture for the fight poster halves. */
+.halftone {
+  background-image: radial-gradient(rgb(242 115 95 / 0.12) 1.1px, transparent 1.3px);
+  background-size: 9px 9px;
+}
+.halftone-light {
+  background-image: radial-gradient(rgb(130 158 254 / 0.14) 1.1px, transparent 1.3px);
+  background-size: 9px 9px;
+}
+
+/* The NME Times marquee */
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee {
+  animation: marquee var(--marquee-s, 80s) linear infinite;
+}
+.marquee-wrap:hover .marquee {
+  animation-play-state: paused;
+}
+
+/* New-row flash: tone colour washes in, then settles to paper. */
+@keyframes flash {
+  0% {
+    background-color: var(--flash, var(--color-yolk));
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.flash {
+  animation: flash 1.6s ease-out;
+}
+
+/* Hit label in the 3D arena: rises and fades. */
+@keyframes pop {
+  0% { transform: translateY(8px) scale(0.6); opacity: 0; }
+  20% { transform: translateY(0) scale(1.15); opacity: 1; }
+  100% { transform: translateY(-40px) scale(1); opacity: 0; }
+}
+.pop {
+  animation: pop 1.5s ease-out forwards;
+}
+@keyframes pop-slow {
+  0% { transform: scale(3) rotate(-12deg); opacity: 0; }
+  12% { transform: scale(1) rotate(-6deg); opacity: 1; }
+  85% { transform: scale(1.05) rotate(-6deg); opacity: 1; }
+  100% { transform: scale(1.05) rotate(-6deg); opacity: 0; }
+}
+.pop-slow {
+  animation: pop-slow 6s ease-out forwards;
+}
+
+/* Pill button: accent fill, hairline edge, soft lift on hover. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 0.8rem 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 8px 24px -14px rgb(0 0 0 / 0.8);
+  transition:
+    transform 0.15s var(--ease-punch),
+    filter 0.15s,
+    box-shadow 0.15s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 12px 28px -12px rgb(0 0 0 / 0.9);
+}
+.btn:active {
+  transform: translateY(1px);
+  filter: brightness(0.96);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .marquee {
+    animation: none !important;
+  }
+}
+
+/* Embedded widget (/widget/*): the page is only as tall as its content, and overlays become part of the flow,
+   replacing the card while open, so the iframe can grow to fit them. */
+html.embed body {
+  min-height: 0 !important;
+  background: transparent !important;
+}
+html.embed .nme-overlay {
+  position: relative !important;
+  inset: auto !important;
+  z-index: auto !important;
+  display: block !important;
+  background: transparent !important;
+  padding: 8px !important;
+}
+html.embed .nme-overlay > [role="dialog"] {
+  max-height: none !important;
+  border-radius: 1.6rem !important;
+  box-shadow: 0 18px 40px -22px var(--color-drop) !important;
+}
+html.embed body:has(.nme-overlay) .nme-card {
+  display: none;
+}
+html.embed .nme-toasts {
+  position: relative !important;
+  inset: auto !important;
+  width: auto !important;
+  padding: 0 8px 8px;
+}

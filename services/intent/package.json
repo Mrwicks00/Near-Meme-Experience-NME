@@ -1,0 +1,20 @@
+{
+  "name": "nme-intent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NME intent service: turns a sentence into a launch draft and a preview of the create_coin call. It parses and previews only (D-58): no NEAR key, no signing, no execution.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "sharp": "0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2"
+  }
+}

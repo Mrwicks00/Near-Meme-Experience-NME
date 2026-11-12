@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NME widget demo</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; font: 17px/1.55 Georgia, serif; background: #f2efe8; color: #222; }
+    main { max-width: 1000px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 32px; grid-template-columns: 1fr; }
+    @media (min-width: 880px) { main { grid-template-columns: 1fr 440px; } }
+    h1 { font-size: 2.2rem; margin: 0 0 8px; }
+    .note { font: 14px/1.5 system-ui, sans-serif; background: #fff; border: 1px solid #ccc; border-radius: 10px; padding: 14px 16px; }
+    pre { white-space: pre-wrap; word-break: break-all; background: #1b1b1b; color: #f1f1f1; padding: 14px; border-radius: 10px; font-size: 13px; }
+    .pick { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+    .pick button { font: 600 14px system-ui, sans-serif; padding: 6px 12px; border-radius: 999px; border: 2px solid #222; background: #fff; cursor: pointer; }
+    .pick button[aria-pressed="true"] { background: #222; color: #fff; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <p class="note">This page stands in for <strong>any other website</strong> (a meme blog, a Telegram mini app, a launchpad). The card on the right is the NME widget: one script tag, live data from NEAR testnet, and Buy / Hire happen inside the card with the reader's own wallet.</p>
+      <h1>Pond Weekly</h1>
+      <p>Readers can buy a coin, join its war or hire its brain without leaving this page.</p>
+      <p class="note"><strong>Pick a coin to embed:</strong></p>
+      <div class="pick" id="pick" role="group" aria-label="Coin to embed">loading coins…</div>
+      <p>The site owner pastes exactly this line where the card should appear:</p>
+      <pre id="code"></pre>
+      <p class="note">Outside fighters (coins from other launchpads) work too: use their token account, for example <code>data-ticker="nme-batman.testnet"</code>.</p>
+    </article>
+    <aside id="slot"></aside>
+  </main>
+  <script>
+    (function () {
+      var origin = location.origin;
+      var ticker = (new URLSearchParams(location.search).get("ticker") || "pepe").toLowerCase();
+      function mount(t) {
+        ticker = t;
+        history.replaceState(null, "", "?ticker=" + encodeURIComponent(t));
+        document.getElementById("code").textContent = '<script src="' + origin + '/nme-widget.js" data-ticker="' + t + '"><\/script>';
+        var slot = document.getElementById("slot");
+        slot.innerHTML = "";
+        var s = document.createElement("script");
+        s.src = "/nme-widget.js";
+        s.setAttribute("data-ticker", t);
+        slot.appendChild(s);
+        document.querySelectorAll("#pick button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.t === t)); });
+      }
+      // The live coin list, read from the factory through the site's view proxy.
+      fetch("/api/view", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ contract: "nme.testnet", method: "list_coins", args: { from_index: 0, limit: 50 } }) })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          var list = JSON.parse(new TextDecoder().decode(new Uint8Array(j.result.result)));
+          var pick = document.getElementById("pick");
+          pick.innerHTML = "";
+          list.filter(function (x) { return x[1].status === "Live"; }).map(function (x) { return x[0]; }).concat(["nme-batman.testnet"]).forEach(function (t) {
+            var b = document.createElement("button");
+            b.dataset.t = t;
+            b.textContent = "$" + (t.indexOf(".") > 0 ? "S12 (outside)" : t.toUpperCase());
+            b.onclick = function () { mount(t); };
+            pick.appendChild(b);
+          });
+          mount(ticker);
+        })
+        .catch(function () { document.getElementById("pick").textContent = "Couldn't load the coin list."; mount(ticker); });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+[package]
+name = "nme-it"
+description = "NME integration tests (near-sandbox + imported Ref/wNEAR from testnet)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
+near-contract-standards.workspace = true
+nme-common.workspace = true
+near-api = "0.8"
+near-sandbox = "0.3.16"
+tokio = { version = "1.12.0", features = ["full"] }
+testresult = "0.4.1"
+ed25519-dalek = "2"
+k256 = { version = "0.13", features = ["ecdsa"] }
+sha3 = "0.10"
