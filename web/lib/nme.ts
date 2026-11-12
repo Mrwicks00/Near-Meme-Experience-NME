@@ -206,6 +206,29 @@ export type DefenseState = { high_point: number; high_ms: number; last_action_ms
 export type Delivery = { seq: number; job_id: number; ticker: string; kind: string; text: string; model: string; chat_id: string; ts_ms: number; media_url?: string | null; media_hash?: string | null };
 export const JOB_KINDS = ["roast", "shill", "lore", "meme"] as const;
 
+/** "6 d 4 h", "3 h 12 min", "8 min". */
+export function timeLeft(ms: number): string {
+  if (ms <= 0) return "now";
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (d >= 1) return `${d} d ${h % 24} h`;
+  if (h >= 1) return `${h} h ${m % 60} min`;
+  return `${Math.max(1, m)} min`;
+}
+
+export type BagState = { tone: "ok" | "soon" | "due" | "gone"; label: string; left: number };
+/** Where a PumpBag stands: active, deadline within a day, past it (anyone can forfeit), or forfeited. */
+export function bagState(c: CrownStatus, now: number): BagState {
+  const left = c.forfeitable_after_ms - now;
+  if (c.forfeited) return { tone: "gone", label: "Forfeited", left };
+  if (left <= 0) return { tone: "due", label: "Inactive: can be forfeited", left };
+  if (left < 86_400_000 || left < c.inactivity_ms / 7) return { tone: "soon", label: `Active, heartbeat due in ${timeLeft(left)}`, left };
+  return { tone: "ok", label: `Active, safe for ${timeLeft(left)}`, left };
+}
+export const BAG_TONE: Record<BagState["tone"], string> = { ok: "bg-lime text-ink", soon: "bg-yolk text-ink", due: "bg-red text-cream", gone: "bg-paper text-ink" };
+
+/** A creator or holder account, in words: the gateway holds bags for Phantom / MetaMask wallets. */
+export const holderName = (acct?: string | null) => (!acct ? "–" : acct === NME.gateway ? "a Phantom / MetaMask wallet" : acct);
+
 export const loadCrown = (ticker: string) => view<CrownStatus | null>(NME.crown, "crown_status", { token_id: ticker });
 export const loadDefenseConfig = () => view<DefenseConfig>(NME.arena, "get_defense_config");
 export const loadDefenseState = (ticker: string) => view<DefenseState | null>(NME.arena, "get_defense_state", { ticker });

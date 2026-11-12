@@ -7,6 +7,7 @@ const links = [
   { href: "/#memes", label: "Memes" },
   { href: "/#launch", label: "Launch" },
   { href: "/#times", label: "Live feed" },
+  { href: "/me", label: "My coins" },
 ];
 
 export function Nav({ right }: { right?: React.ReactNode }) {

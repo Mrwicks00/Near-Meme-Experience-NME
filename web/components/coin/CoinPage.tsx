@@ -6,7 +6,7 @@ import { accessKeyCount, view } from "@/lib/rpc";
 import { ago, compact, near, scale } from "@/lib/format";
 import { useCoins, useFeed, useNow, usePolled } from "@/lib/hooks";
 import {
-  Coin, CrownStatus, DefenseConfig, DefenseState, Delivery, JOB_KINDS, describe,
+  Coin, CrownStatus, DefenseConfig, DefenseState, Delivery, JOB_KINDS, describe, bagState, BAG_TONE, holderName, timeLeft,
   prettyText, loadBalance, loadCoin, loadCrown, loadDefenseConfig, loadDefenseState, loadDeliveries, loadJobPrice, pendingBurns, quoteSell,
 } from "@/lib/nme";
 import { CoinIcon, useIconTint } from "../CoinIcon";
@@ -204,7 +204,21 @@ function Defense({ coin, cfg, st }: { coin: Coin; cfg: DefenseConfig | null; st:
   );
 }
 
-function PumpBag({ coin, crown, xOwner }: { coin: Coin; crown: CrownStatus | null; xOwner: string | null }) {
+/** Who made the coin, who holds its PumpBag now (it can be sold) and whether they are keeping it alive. */
+function CreatorLine({ coin, crown }: { coin: Coin; crown: CrownStatus | null }) {
+  const now = useNow(30000);
+  const st = crown && now ? bagState(crown, now) : null;
+  const sold = crown && coin.creator && crown.owner !== coin.creator;
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+      <span>Created by <a className="font-semibold underline" href={`${NME.explorer}/address/${coin.creator}`} target="_blank" rel="noreferrer">{holderName(coin.creator)}</a></span>
+      {sold && <span>· PumpBag now held by <strong>{holderName(crown!.owner)}</strong></span>}
+      {st && <span className={`chip ${BAG_TONE[st.tone]}`}>{st.tone === "gone" ? "creator bag forfeited" : st.tone === "due" ? "creator inactive" : "creator active"}</span>}
+    </p>
+  );
+}
+
+export function PumpBag({ coin, crown, xOwner }: { coin: Coin; crown: CrownStatus | null; xOwner: string | null }) {
   const { account, x, call, act } = useActions();
   const now = useNow(30000);
   if (!crown) return null;
@@ -212,6 +226,7 @@ function PumpBag({ coin, crown, xOwner }: { coin: Coin; crown: CrownStatus | nul
   const viaGateway = !!x && crown.owner === NME.gateway && xOwner === x.owner;
   const mine = account === crown.owner || viaGateway;
   const canForfeit = !crown.forfeited && now > crown.forfeitable_after_ms;
+  const st = bagState(crown, now);
   return (
     <Panel tone="bg-paper" kicker="pumpbag" title="The creator's bag">
       <p className="text-[1.02rem] leading-relaxed">The creator&apos;s 5% sits in a vault and vests over time, never in a free wallet. If the owner goes quiet too long, anyone can forfeit the bag: the unvested part is burned.</p>
@@ -219,8 +234,14 @@ function PumpBag({ coin, crown, xOwner }: { coin: Coin; crown: CrownStatus | nul
         <div className="flex justify-between gap-4"><dt>Owner</dt><dd className="truncate font-semibold">{viaGateway ? `held for your ${walletName(x!)} wallet` : crown.owner}{mine && " (you)"}</dd></div>
         <div className="flex justify-between gap-4"><dt>Vault</dt><dd className="truncate"><a className="underline" href={`${NME.explorer}/address/${crown.vault}`} target="_blank" rel="noreferrer">{crown.vault}</a></dd></div>
         <div className="flex justify-between gap-4"><dt>Last heartbeat</dt><dd>{crown.last_heartbeat_ms ? ago(crown.last_heartbeat_ms, now) : "–"}</dd></div>
-        <div className="flex justify-between gap-4"><dt>Status</dt><dd className="font-semibold">{crown.forfeited ? "Forfeited — fees go to the treasury" : canForfeit ? "Owner went quiet — can be forfeited" : `Safe for ${ago(now - (crown.forfeitable_after_ms - now), now).replace(" ago", "")}`}</dd></div>
+        <div className="flex justify-between gap-4"><dt>Must check in every</dt><dd>{timeLeft(crown.inactivity_ms)}</dd></div>
+        <div className="flex items-center justify-between gap-4"><dt>Status</dt><dd><span className={`chip ${BAG_TONE[st.tone]}`}>{crown.forfeited ? "Forfeited: fees go to the treasury" : st.label}</span></dd></div>
       </dl>
+      {mine && !crown.forfeited && (
+        <p className={`mt-4 rounded-2xl border border-ink p-3 text-sm ${st.tone === "ok" ? "bg-lime-deep" : "bg-yolk"}`}>
+          You hold this PumpBag. Press <strong>I&apos;m still here</strong> before {st.left > 0 ? `the deadline (in ${timeLeft(st.left)})` : "anyone forfeits it"}; only that button restarts the clock. Claiming does not.
+        </p>
+      )}
       {mine && !crown.forfeited && (
         <div className="mt-5 grid gap-2 sm:grid-cols-3">
           <button className="btn bg-mint text-sm" onClick={() => viaGateway
@@ -311,7 +332,8 @@ export function CoinPage({ coinKey }: { coinKey: string }) {
               <a className="chip bg-paper normal-case tracking-normal" href={`${NME.explorer}/address/${coin.account}`} target="_blank" rel="noreferrer">{coin.account}</a>
             </div>
             <h1 className="mt-4 font-display text-[clamp(3.4rem,11vw,9rem)] leading-[0.85] tracking-[-0.02em]">${coin.ticker}</h1>
-            <p className="mt-2 text-lg font-semibold">{coin.name}{coin.creator ? <span className="font-normal"> · made by {coin.creator}</span> : null}</p>
+            <p className="mt-2 text-lg font-semibold">{coin.name}</p>
+            {coin.native && <CreatorLine coin={coin} crown={crown} />}
             {coin.vibe && <p className="mt-3 max-w-[40ch] font-serif text-2xl italic leading-snug">“{coin.vibe}”</p>}
             {!!coin.rivals?.length && (
               <p className="mt-3 flex flex-wrap items-center gap-1.5 text-sm font-semibold">Rivals: {coin.rivals.map((r) => <span key={r} className="chip bg-red text-cream">${r.toUpperCase()}</span>)}</p>
