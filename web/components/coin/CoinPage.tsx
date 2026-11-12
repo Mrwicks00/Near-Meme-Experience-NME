@@ -15,6 +15,7 @@ import { useActions, yocto } from "../Actions";
 import { crownOwnerOf, walletTokens } from "@/lib/xwallet";
 import { TradeBox } from "../TradeBox";
 import { Raid } from "./Raid";
+import { CoinMarket } from "./CoinMarket";
 import { ProofBadge } from "../ProofBadge";
 import { walletName } from "@/lib/xwallet";
 
@@ -331,8 +332,7 @@ export function CoinPage({ coinKey }: { coinKey: string }) {
     { k: "Price", v: coin.priceNear !== null ? `${compact(coin.priceNear)} NEAR` : "–" },
     { k: "Supply", v: coin.supply ? compact(coin.supply) : "–" },
     { k: "Burned", v: compact(coin.burned) },
-    { k: "Treasury", v: `${compact(coin.treasuryNear)} NEAR` },
-    { k: "War chest", v: `${compact(coin.chestNear)} NEAR` },
+    { k: "Market cap", v: coin.priceNear !== null && coin.supply ? `${compact(coin.priceNear * coin.supply)} NEAR` : "–" },
     ...(account || x ? [{ k: "You hold", v: balance ? compact(scale(balance, 18)) : "0" }] : []),
   ];
 
@@ -357,7 +357,7 @@ export function CoinPage({ coinKey }: { coinKey: string }) {
             )}
           </div>
         </div>
-        <dl className={`num grid grid-cols-2 border-t border-ink bg-paper sm:grid-cols-3 ${stats.length > 5 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
+        <dl className={`num grid grid-cols-2 border-t border-ink bg-paper sm:grid-cols-3 ${stats.length > 4 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           {stats.map((s) => (
             <div key={s.k} className="border-b border-r border-ink px-4 py-4 sm:px-6 lg:border-b-0">
               <dt className="text-xs font-semibold uppercase tracking-wide text-ink-2">{s.k}</dt>
@@ -366,6 +366,8 @@ export function CoinPage({ coinKey }: { coinKey: string }) {
           ))}
         </dl>
       </section>
+
+      <CoinMarket coin={coin} feed={feed.items} deliveries={deliveries ?? []} />
 
       <section className="border-b border-ink bg-mint-deep px-4 py-8 sm:px-8">
         <TradeBox defaultTicker={coin.key} />

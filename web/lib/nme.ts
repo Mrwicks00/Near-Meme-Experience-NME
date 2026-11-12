@@ -18,6 +18,19 @@ export type WarConfig = { round_duration_ms: number; round_interval_ms: number; 
 export type FeedItem = { id: number; ts_ms: number; kind: string; ticker: string; actor: string; amount: string; extra: string };
 export type Commentary = { seq: number; ticker: string; event: string; text: string; model: string; chat_id: string; ts_ms: number };
 
+export type PoolStats = {
+  nearBought: number;   // NEAR paid in to buy the coin
+  nearSold: number;     // NEAR paid out to sellers
+  nearInPool: number;   // NEAR side of the liquidity
+  tokensInPool: number; // coin side of the liquidity
+  feesNear: number;     // trading fees the pool charged, valued in NEAR
+};
+type DclPool = {
+  token_x: string; current_point: number; total_x: string; total_y: string;
+  volume_x_in: string; volume_y_in: string; volume_x_out: string; volume_y_out: string;
+  total_fee_x_charged: string; total_fee_y_charged: string;
+};
+
 export type Coin = {
   key: string;            // arena key: ticker for NME coins, token account for outside coins
   ticker: string;         // display ticker (upper case)
@@ -28,6 +41,8 @@ export type Coin = {
   creator?: string;
   /** For coins launched from Phantom / MetaMask (creator = the gateway): the wallet that launched it, `sol:<pk>` / `evm:<0x…>`. */
   creatorWallet?: string;
+  /** Lifetime numbers of the coin's Rhea pool (every trade on the pool, not only through NME). */
+  pool?: PoolStats;
   createdMs?: number;
   vibe?: string;
   rivals?: string[];
@@ -65,11 +80,23 @@ export async function loadCoin(keyIn: string, rec?: CoinRecord, lenient = false)
   ]);
   const poolId = entry?.pool_id ?? summary?.pool.pool_id ?? null;
   let priceNear: number | null = null;
+  let poolRaw: DclPool | null = null;
   if (poolId) {
-    const pool = await v<{ token_x: string; current_point: number } | null>(NME.dcl, "get_pool", { pool_id: poolId });
-    if (pool) priceNear = priceFromPoint(pool.current_point, pool.token_x === account);
+    poolRaw = await v<DclPool | null>(NME.dcl, "get_pool", { pool_id: poolId });
+    if (poolRaw) priceNear = priceFromPoint(poolRaw.current_point, poolRaw.token_x === account);
   }
   const dec = meta?.decimals ?? 18;
+  let pool: PoolStats | undefined;
+  if (poolRaw && poolRaw.total_y !== undefined) {
+    // The coin is token_x or token_y of the pool; NEAR (wNEAR) is the other side.
+    const coinIsX = poolRaw.token_x === account;
+    const n = (y: string) => near(y);
+    const tk = (x: string) => Number(BigInt(x || "0")) / 10 ** dec;
+    const px = priceNear !== null ? priceNear * Math.pow(10, 18 - dec) : 0;
+    pool = coinIsX
+      ? { nearBought: n(poolRaw.volume_y_in), nearSold: n(poolRaw.volume_y_out), nearInPool: n(poolRaw.total_y), tokensInPool: tk(poolRaw.total_x), feesNear: n(poolRaw.total_fee_y_charged) + tk(poolRaw.total_fee_x_charged) * px }
+      : { nearBought: n(poolRaw.volume_x_in), nearSold: n(poolRaw.volume_x_out), nearInPool: n(poolRaw.total_x), tokensInPool: tk(poolRaw.total_y), feesNear: n(poolRaw.total_fee_x_charged) + tk(poolRaw.total_fee_y_charged) * px };
+  }
   return {
     key,
     ticker: (meta?.symbol ?? key).toUpperCase(),
@@ -87,6 +114,7 @@ export async function loadCoin(keyIn: string, rec?: CoinRecord, lenient = false)
     chestNear: near(entry?.chest_near),
     burned: tokens(summary?.burned),
     supply: tokens(summary?.supply),
+    pool,
   };
 }
 
