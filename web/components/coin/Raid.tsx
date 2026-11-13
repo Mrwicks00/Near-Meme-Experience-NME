@@ -1,6 +1,7 @@
 "use client";
 // Raids on NEAR Social: start a raid, post with its hashtag (optionally with one of the coin's AI memes), claim the post.
 // The arena reads the post straight from SocialDB, so everything here is a plain NEAR transaction the user signs.
+import { MemeImage } from "../MemeImage";
 import { useState } from "react";
 import { NME } from "@/lib/config";
 import { compact, near } from "@/lib/format";
@@ -134,8 +135,7 @@ export function Raid({ coin, memes, raiders }: { coin: Coin; memes: Delivery[]; 
                   <div className="mt-2 grid grid-cols-3 gap-2">
                     {pics.map((d) => (
                       <button key={d.seq} onClick={() => setPic(pic === d.media_url ? "" : d.media_url!)} className={`overflow-hidden rounded-xl border-2 ${pic === d.media_url ? "border-night" : "border-transparent"}`} aria-pressed={pic === d.media_url}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={d.media_url!} alt={d.text} className="aspect-square w-full object-cover" />
+                        <MemeImage src={d.media_url!} alt={d.text} className="aspect-square w-full object-cover" />
                       </button>
                     ))}
                   </div>

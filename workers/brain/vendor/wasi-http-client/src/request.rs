@@ -227,6 +227,15 @@ impl RequestBuilder {
         self
     }
 
+    /// NME patch: cap the wait for the response to start (the server's work, e.g. drawing a picture) and any stall
+    /// between body bytes, so a slow server can't hold the run past OutLayer's limit. Ignored by hosts that lack it.
+    pub fn response_timeout(mut self, timeout: Duration) -> Self {
+        if let Ok(ref mut req) = self.request {
+            req.response_timeout = Some(timeout.as_nanos() as u64);
+        }
+        self
+    }
+
     /// Send the Request, returning a [`Response`].
     pub fn send(self) -> Result<Response> {
         match self.request {
@@ -242,6 +251,7 @@ struct Request {
     headers: Headers,
     body: Option<Vec<u8>>,
     connect_timeout: Option<u64>,
+    response_timeout: Option<u64>,
 }
 
 impl Request {
@@ -252,6 +262,7 @@ impl Request {
             headers: Headers::new(),
             body: None,
             connect_timeout: None,
+            response_timeout: None,
         }
     }
 
@@ -297,6 +308,10 @@ impl Request {
         options
             .set_connect_timeout(self.connect_timeout)
             .map_err(|()| anyhow!("failed to set connect_timeout"))?;
+        if self.response_timeout.is_some() {
+            let _ = options.set_first_byte_timeout(self.response_timeout);
+            let _ = options.set_between_bytes_timeout(self.response_timeout);
+        }
 
         let future_response = outgoing_handler::handle(req, Some(options))?;
         let incoming_response = match future_response.get() {

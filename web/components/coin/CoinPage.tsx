@@ -1,4 +1,5 @@
 "use client";
+import { MemeImage } from "../MemeImage";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { NME } from "@/lib/config";
@@ -173,8 +174,7 @@ export function Hire({ coin, deliveries }: { coin: Coin; deliveries: Delivery[] 
         {deliveries.map((d) => (
           <li key={d.seq} className="rounded-2xl border border-ink bg-paper p-4">
             <p className="flex justify-between text-xs font-semibold"><span>{d.kind} · job {d.job_id}</span><span>{ago(d.ts_ms)}</span></p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {d.media_url && <img src={d.media_url} alt={`Meme drawn by $${coin.ticker}`} className="mt-2 w-full rounded-xl border-2 border-ink" />}
+            {d.media_url && <MemeImage src={d.media_url} alt={`Meme drawn by $${coin.ticker}`} className="mt-2 w-full rounded-xl border-2 border-ink" />}
             <p className="mt-2 font-serif text-lg leading-snug">{prettyText(d.text)}</p>
             <p className="mt-1 text-[0.7rem] opacity-70">AI · {d.model.split("/").pop()}</p>
             <ProofBadge chatId={d.chat_id} model={d.model} requestHash={d.request_hash} responseHash={d.response_hash} />

@@ -119,6 +119,9 @@ pub struct JobOutput {
     /// Proof of Thought: sha256 hex of the exact request and response bytes, as signed by the model's TEE.
     pub request_hash: String,
     pub response_hash: String,
+    /// How long the run had taken at each step, "step=monotonic_ms/wall_ms" (diagnosis; the contract ignores it).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub timings: String,
 }
 
 /// What we ask the model to return.

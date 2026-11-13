@@ -11,13 +11,25 @@ use std::io::{Read, Write};
 mod budget {
     use std::sync::OnceLock;
     use std::time::{Duration, Instant};
-    static START: OnceLock<Instant> = OnceLock::new();
+    static START: OnceLock<(Instant, std::time::SystemTime)> = OnceLock::new();
+    static MARKS: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
     pub const TOTAL: Duration = Duration::from_secs(75);
     pub fn start() {
-        let _ = START.set(Instant::now());
+        let _ = START.set((Instant::now(), std::time::SystemTime::now()));
+    }
+    /// Records how long the run has taken at a step (monotonic / wall clock, ms), returned as `timings` for diagnosis.
+    pub fn mark(step: &str) {
+        let (i, w) = START.get_or_init(|| (Instant::now(), std::time::SystemTime::now()));
+        let wall = w.elapsed().map(|d| d.as_millis()).unwrap_or(0);
+        if let Ok(mut m) = MARKS.lock() {
+            m.push_str(&format!("{step}={}/{} ", i.elapsed().as_millis(), wall));
+        }
+    }
+    pub fn marks() -> String {
+        MARKS.lock().map(|m| m.trim().to_string()).unwrap_or_default()
     }
     pub fn left() -> Duration {
-        TOTAL.saturating_sub(START.get_or_init(Instant::now).elapsed())
+        TOTAL.saturating_sub(START.get_or_init(|| (Instant::now(), std::time::SystemTime::now())).0.elapsed())
     }
     /// The wait for one request: its own cap, but never past the budget. Err when nothing is left.
     pub fn cap(max: Duration) -> Result<Duration, String> {
@@ -35,13 +47,13 @@ mod http {
     use wasi_http_client::Client;
 
     pub fn get(url: &str) -> Result<(u16, Vec<u8>), String> {
-        let r = Client::new().get(url).connect_timeout(crate::budget::cap(Duration::from_secs(10))?).send().map_err(|e| format!("http: {e:?}"))?;
+        let r = Client::new().get(url).connect_timeout(crate::budget::cap(Duration::from_secs(10))?).response_timeout(crate::budget::cap(Duration::from_secs(10))?).send().map_err(|e| format!("http: {e:?}"))?;
         let status = r.status();
         Ok((status, r.body().map_err(|e| format!("body: {e:?}"))?))
     }
 
     pub fn post_plain(url: &str, body: &str) -> Result<(u16, Vec<u8>), String> {
-        let r = Client::new().post(url).header("Content-Type", "application/json").connect_timeout(crate::budget::cap(Duration::from_secs(15))?).body(body.as_bytes()).send().map_err(|e| format!("http: {e:?}"))?;
+        let r = Client::new().post(url).header("Content-Type", "application/json").connect_timeout(crate::budget::cap(Duration::from_secs(10))?).response_timeout(crate::budget::cap(Duration::from_secs(15))?).body(body.as_bytes()).send().map_err(|e| format!("http: {e:?}"))?;
         let status = r.status();
         Ok((status, r.body().map_err(|e| format!("body: {e:?}"))?))
     }
@@ -51,7 +63,7 @@ mod http {
             .post(url)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {bearer}"))
-            .connect_timeout(crate::budget::cap(Duration::from_secs(40))?)
+            .connect_timeout(crate::budget::cap(Duration::from_secs(10))?).response_timeout(crate::budget::cap(Duration::from_secs(40))?)
             .body(body.as_bytes())
             .send()
             .map_err(|e| format!("http: {e:?}"))?;
@@ -107,6 +119,7 @@ fn make_meme(key: &str, rpc_url: &str, image_prompt: &str, stage: Option<u8>) ->
     if !(200..300).contains(&status) {
         return Err(last_err);
     }
+    budget::mark("image");
     let v: serde_json::Value = serde_json::from_slice(&body).map_err(|e| format!("image json: {e}"))?;
     let bytes = base64::engine::general_purpose::STANDARD.decode(v["data"][0]["b64_json"].as_str().ok_or("the image model returned no picture")?).map_err(|e| format!("bad base64: {e}"))?;
     if bytes.is_empty() || bytes.len() > chain::MAX_IMAGE_BYTES {
@@ -148,28 +161,18 @@ fn make_meme(key: &str, rpc_url: &str, image_prompt: &str, stage: Option<u8>) ->
         }
     }
     sent?;
+    budget::mark("upload");
     stop(6, "sent".into())?;
-    let url = chain::fastfs_url(&account, &path);
-    // FastFS serves the file shortly after the transaction is included; each GET takes a moment, so just ask again.
-    let mut last = String::from("no attempt");
-    for i in 0..25 {
-        if budget::left() < std::time::Duration::from_secs(5) {
-            break;
-        }
-        // A fresh query string per try, so a cached 404 cannot be served back.
-        match http::get(&format!("{url}?t={i}")) {
-            Ok((200, got)) if chain::sha256_hex(&got) == hash => return Ok((url, hash)),
-            Ok((st, got)) => last = format!("HTTP {st}, {} bytes, sha {}", got.len(), chain::sha256_hex(&got).chars().take(10).collect::<String>()),
-            Err(e) => last = e.chars().take(120).collect(),
-        }
-        std::thread::sleep(std::time::Duration::from_secs(3));
-    }
-    Err(format!("the picture was uploaded but FastFS does not serve it (last try: {last}; {url})"))
+    // Done once the upload is in a block. FastFS indexes it a little later (it took up to ~100 s, longer than OutLayer
+    // lets a run live); the sha256 already pins the exact picture, and the web app retries until FastFS serves it.
+    Ok((chain::fastfs_url(&account, &path), hash))
 }
 
 fn fail(msg: &str) -> ! {
     // One JSON line even on failure, so the contract can tell "worker said no" from "worker crashed".
-    println!("{}", serde_json::json!({ "ok": false, "error": msg }));
+    budget::mark("fail");
+    let timings = budget::marks();
+    println!("{}", serde_json::json!({ "ok": false, "error": msg, "timings": timings }));
     let _ = std::io::stdout().flush();
     std::process::exit(0);
 }
@@ -197,7 +200,7 @@ fn ping() {
 fn coin_vibe(rpc: &str, coin: &str) -> Option<String> {
     use std::time::Duration;
     let body = serde_json::json!({"jsonrpc":"2.0","id":"p","method":"query","params":{"request_type":"call_function","finality":"final","account_id":coin,"method_name":"get_config","args_base64":"e30="}}).to_string();
-    let r = wasi_http_client::Client::new().post(rpc).header("Content-Type", "application/json").connect_timeout(crate::budget::cap(Duration::from_secs(8)).ok()?).body(body.as_bytes()).send().ok()?;
+    let r = wasi_http_client::Client::new().post(rpc).header("Content-Type", "application/json").connect_timeout(crate::budget::cap(Duration::from_secs(8)).ok()?).response_timeout(crate::budget::cap(Duration::from_secs(20)).ok()?).body(body.as_bytes()).send().ok()?;
     let v: serde_json::Value = serde_json::from_slice(&r.body().ok()?).ok()?;
     let bytes: Vec<u8> = v["result"]["result"].as_array()?.iter().filter_map(|x| x.as_u64().map(|n| n as u8)).collect();
     Some(vibe_from_config(&serde_json::from_slice(&bytes).ok()?))
@@ -215,6 +218,7 @@ fn job(mut job: Job) {
             }
         }
     }
+    budget::mark("vibe");
     let Ok(key) = std::env::var("NEAR_AI_API_KEY") else { fail("NEAR_AI_API_KEY is not set") };
     if key.is_empty() {
         fail("NEAR_AI_API_KEY is empty");
@@ -231,6 +235,7 @@ fn job(mut job: Job) {
         fail(&format!("NEAR AI returned HTTP {status}"));
     }
     let v: serde_json::Value = serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null);
+    budget::mark("text");
     let content = v["choices"][0]["message"]["content"].as_str().unwrap_or("");
     let reply = match parse_reply(content) {
         Ok(r) => r,
@@ -261,6 +266,7 @@ fn job(mut job: Job) {
         media_hash,
         request_hash: chain::sha256_hex(request.as_bytes()),
         response_hash: chain::sha256_hex(&body),
+        timings: { budget::mark("done"); budget::marks() },
     };
     println!("{}", serde_json::to_string(&out).unwrap_or_else(|_| "{\"ok\":false,\"error\":\"serialize\"}".into()));
 }
