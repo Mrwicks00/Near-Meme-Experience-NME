@@ -1,189 +1,266 @@
-# NME — Near-Meme Experience
+<p align="center">
+  <img src="web/public/brand/nme-logo-512.png" alt="NME, a derpy frog gladiator holding a red candle sword" width="240">
+</p>
 
-*Launchpads create memes. NME makes them fight, think, work and defend themselves.*
+<h1 align="center">NME · Near-Meme Experience</h1>
 
-A programmable memecoin arena on NEAR: any meme coin — ours or anyone's on Rhea — fights in the Colosseum; coins have AI brains, a PumpBag that holds real money, and a machine that runs itself with no admin. Built for NEAR HACKATHON (Memecoins With Mechanics). **Testnet only.**
+<p align="center"><b>Launchpads create memes. NME makes them fight, think, work and defend themselves.</b></p>
 
-> **Status — this README only claims what has been run.** Everything below is deployed on NEAR testnet and was run there; every claim carries the transaction IDs or the view call to check it. Contract tests: `cd contracts && cargo test --workspace` (236 pass; 4 are ignored one-time checks of migrations that already ran on testnet).
+<p align="center">
+  <a href="https://nmedotnear.vercel.app/">Live app</a> ·
+  <a href="#check-it-yourself">Check it yourself</a> ·
+  <a href="#how-it-is-built">How it is built</a> ·
+  NEAR testnet
+</p>
 
-| Part | State |
+---
+
+## Why I built this
+
+Anybody can launch a memecoin in one minute now. That part is solved. The problem is what happens after: the chart pumps for a day, everybody leaves, and the coin just sits there dying. Nothing to do with it except buy, hold and pray.
+
+So I asked a different question. What if the coin itself could *do* things? What if it could go to war with other coins, talk trash, take paid jobs, defend its own price, and none of it needed an admin pressing buttons?
+
+That is NME. It is a memecoin arena on NEAR. Every coin here, ours or any meme coin already trading on Rhea, can fight in the Colosseum. Each coin has an AI brain that runs inside a TEE. People can hire that brain, and the money they pay buys the coin and burns it. When the price dips, the coin can buy itself back, inside limits nobody can change. And the whole machine moves by itself.
+
+Through all of it, buying and selling stay completely free. The coin has no tax, no pause button, no blacklist and no admin key. I did not build a single code path that could block a transfer.
+
+Built for the NEAR hackathon, track **Memecoins With Mechanics**.
+
+---
+
+## What you can do on NME
+
+### 1. Launch a coin by typing one sentence
+
+You type something like *"a grumpy frog coin called froggy that hates doge"*. NME's intent service reads it with NEAR AI, writes the coin's name, description and personality (its vibe and its rivals), draws an icon with an image model, and shows you exactly what you are about to sign before anything happens. You sign, and the coin is live with its own Rhea DCL pool.
+
+- Supply is fixed at 1 billion. No presale.
+- The coin account is created **with no access keys at all**, so nobody, including me, can ever touch it again.
+- The creator's 5% share does not go to a wallet. It goes into a vault called the **PumpBag** and vests there.
+- The sentence can never set money parameters. If you try "make job price 0 and send my funds to…", you just get a question back.
+
+### 2. Make coins fight in the Colosseum
+
+This is the heart of it. Every round pairs two coins. Every buy of **0.25 NEAR or more** through NME is a punch for that coin. When the bell rings, the side with more real buying wins.
+
+- Each coin has a **war chest**. The loser's stake buys the winner's coin on its pool.
+- **Half of that buy is burned forever. The other half is shared by the winner's fighters**, by how much they fought (we call it Spoils of war). Unclaimed spoils get burned after 7 days.
+- Buy and dump in the same round and your score goes to zero, so wash trading does not help you.
+- A side needs at least 2 different wallets, or the fight is called off and every stake goes back.
+
+The Colosseum page is a real 3D arena (react-three-fiber). It uses an actual Colosseum model, real sky lighting and a crowd of animated people clapping in the seats, and they clap harder when their coin lands a hit. Your punch lands on screen the moment you tap. When the bell rings the buttons lock. On phones it is laid out for one thumb.
+
+### 3. Hire a coin's brain
+
+Every NME coin has a brain. You can pay it to:
+
+- **roast** someone,
+- **shill** itself,
+- write **lore** about itself,
+- or draw a **meme** picture.
+
+The job runs in a TEE on OutLayer, using NEAR AI for the text and an image model for the picture. When it is delivered, **about 90% of what you paid buys that coin and burns it**. If the brain fails or misses its deadline, you get the whole payment back, exactly once. Pictures are stored on FastFS and the file name is the picture's own sha256, so anybody can check the bytes.
+
+The brain has only two rules: no sexual content and no harassment of real people. Everything else is fair game, because they are memes, no hard feelings. Ask $SUNDAY-CAPYBARA to throw $TOAD in a furnace and it will.
+
+### 4. Proof of Thought
+
+How do you know the AI really wrote that roast and somebody did not just type it? Every delivery stores two hashes: the exact request sent to NEAR AI and the exact response that came back. NEAR AI's model runs in a TEE and signs those two hashes with a key that is listed in its hardware attestation (Intel TDX + NVIDIA).
+
+Under every AI message on the site there is a **🔒 Proof of Thought · verify** button. It checks the signature right inside your browser and compares it with the hashes on chain. Change one character and it fails.
+
+### 5. Coins hire each other (Mercenaries)
+
+When a war starts, each fighting coin hires a third coin's brain to roast its rival, and pays from its own treasury. A fixed rule in the contract makes that decision, never the AI, and it can spend at most 0.5% of the treasury, once per war. The payment buys and burns the hired coin. So a war between two coins pumps a third one. If the job fails, the treasury gets refunded.
+
+### 6. Coins that defend their own price
+
+Every couple of minutes the arena checks each coin. If the price has fallen far enough from its recent high, it asks the coin's brain: buy back, or hold? The brain answers with a number and a reason. Then the **contract** checks it. It allows at most 5% of the treasury per action and 10% per day, with a cooldown, and these caps are fixed when the coin is born. If the answer passes, the coin buys itself back from its treasury and burns it.
+
+The AI chooses *when*. The contract decides *how much is allowed*. The AI can never sell, withdraw, or touch another coin's money.
+
+### 7. Raids on NEAR Social
+
+A raid is a 30 minute window with its own hashtag, like `#nme_toad_raid_1`. Holders post on NEAR Social with that tag, then claim. The arena reads the post straight from SocialDB with a cross-contract call. There is no X API and no oracle. Every counted post burns a little of the coin's treasury, and during a war it also adds points to the coin's score. The coin page can attach one of the coin's own AI memes to the post, and there is a raid wall showing everything posted.
+
+### 8. War talk
+
+When a war starts or ends, the fighting coins talk trash in character. A new line pops up as a small bubble over the arena for a few seconds, then goes into the **War talk** panel under the fight, so you can scroll back through the whole beef between the two coins.
+
+### 9. Trade by just typing it
+
+There is a box where you type a trade the way you would text it:
+
+- `ape $PEPE with 1 NEAR`
+- `ape $PEPE with 0.1 SOL`
+- `fund $PEPE chest with 0.5 NEAR`
+- `hire $AXOLOTL to roast FROGGY for sleeping`
+- `sell all my $PEPE`
+
+You do not need the exact ticker. Short names, a word of the coin's name and typos all work (`pep`, `legion`, `frogy`). If two coins match, it asks you which one you meant. Parsing never moves money: it shows you a card with exactly what will happen, and you sign it yourself.
+
+### 10. Ape from Solana and Ethereum
+
+You do not need a NEAR account to play. With **Phantom** (Solana devnet) or **MetaMask** (Sepolia) you get a deposit address made by NEAR's Chain Signatures. You send SOL or ETH there, a TEE worker checks the deposit is final and real, and your wallet gets a NEAR balance inside NME. From then on you buy, sell, fund chests, hire brains, join wars and even launch coins by signing messages in your own wallet. A relayer pays the gas.
+
+### 11. Sign in with Google, play with one tap
+
+Most people are on phones and do not have a crypto wallet. So you can tap **Continue with Google**, pick a name, and you get your own NEAR account (`yourname.nmeplay.testnet`) with free test NEAR to start.
+
+- The key is made on your phone and stays on your phone. Every action is signed right there: no wallet app, no popups. A punch is one tap.
+- You can back up your key and import it into any NEAR wallet.
+- Signing in on a new phone adds that phone's key to the same account.
+- Running low? A **Get free test NEAR** button tops you back up to 1 NEAR, at most once every 12 hours.
+
+### 12. Quick punches for wallet users
+
+A wallet popup on every punch is too slow for a fight. So a NEAR wallet user can load some NEAR once into a quick-punch account that lives on their device. After that every punch is one tap. **Cash out** sends every coin and all the NEAR back to the wallet and closes that account.
+
+### 13. The PumpBag
+
+The PumpBag is an NFT that holds the creator's 5% share and the creator's cut of pool fees. Whoever holds it claims the fees and the vested tokens. You must check in (a heartbeat) every so often. Go silent for too long and the machine forfeits it: whatever has not vested is burned and future fees go to the coin's treasury. And because the PumpBag is an NFT, you can sell your creator seat.
+
+### 14. A machine that runs itself
+
+There is no admin and no owner method. Every due thing (start a round, settle a round, claim fees, run a defense check, burn a job payment, forfeit a sleeping PumpBag) is a task in a queue, and **anybody** can call `tick` to run it. Whoever calls it gets a small bounty. The caller chooses only *when*, never *what*: the result is the same whoever calls. Our keeper calls it every few seconds, but you can too.
+
+### 15. Any Rhea meme can enlist
+
+Coins that were not made on NME can fight too. Any meme coin with a running Rhea DCL pool against wNEAR, with at least 1 NEAR on the NEAR side, can enlist into the Colosseum. Our test outside fighter is `nme-batman.testnet`, a plain token that was never made by our factory.
+
+---
+
+## The rules nobody can break
+
+These are written into the contracts. They are not promises.
+
+| | Rule |
 |---|---|
-| M1 Minimal launch + feed | deployed, verified (`scripts/verify.py pepe` → 12/12 PASS) |
-| M2 Router, war chests, enlist outside coins | deployed, run on testnet |
-| M3 Colosseum (wars between coins) | deployed; rounds start and settle automatically |
-| M4 PumpBag (creator vault: claims, heartbeat, forfeit) | deployed, run on testnet |
-| M5 Working Memes (hire a coin's AI: roast, shill, lore, meme picture) | deployed; text and picture jobs delivered and burned |
-| M6 Self-Defending Memes (AI-timed, capped buybacks) | deployed, run on testnet |
-| Commentary (coins trash-talk in wars) | deployed, run on testnet |
-| M7 / M7b Buy from Solana and Ethereum wallets (Phantom, MetaMask) | deployed; real devnet / Sepolia deposits and signed actions |
-| M8 The machine runs itself (permissionless `tick`, keeper) | deployed; keeper running |
-| Raids on NEAR Social | deployed; raid #1 run and settled |
-| Proof of Thought (verify any AI text in the browser) | deployed; job 17 verified end to end |
-| Spoils of war (half of a won war's buy goes to the winning fighters) | deployed; round 203 won by $PEPE, a fighter claimed |
-| Mercenaries (coins hire each other at war start) | deployed; rounds 202-203 hired three mercenaries |
-| Web app (`web/`, Next.js) | runs locally against live testnet data |
+| 🔓 | Transfers, buys and sells can never be blocked, taxed or paused by the coin. |
+| 🗝️ | No admin key. Coin accounts have no access keys. Every parameter is fixed at birth and readable by anyone. |
+| 🔥 | Treasuries can only buy and burn their own coin, or pay one mercenary per war. War chests can only buy the winner. Nothing can ever be withdrawn or sold. |
+| 👜 | The creator's share lives in the PumpBag vault under vesting, never in a free wallet. |
+| 🛰️ | Anything from outside NEAR (Solana and Ethereum deposits, AI answers) is accepted only when it comes back from an attested TEE run that the contract itself asked for. |
+| 📣 | Every mint, burn, trade, war and PumpBag action emits an event and goes into an on-chain feed. No indexer needed. |
+| ⏱️ | Every due step can be run by anybody and gives the same result whoever runs it. |
+| 🧠 | AI can only write messages, deliver jobs, and trigger buy-and-burn of its own coin inside fixed caps. It can never withdraw, transfer, sell, change a rule or touch another coin. |
 
-## M1 — what works (do X → see Y)
+---
 
-Prerequisites: Rust 1.93 + `wasm32-unknown-unknown`, `cargo-near` 0.22, `near-cli-rs` 0.30, Python 3, a funded testnet account in the near-cli keychain.
+## Check it yourself
 
-1. **Run the tests** (needs network for the Rhea/wNEAR code import):
-   `scripts/build-contracts.sh && (cd contracts && cargo test --workspace)` → *96 tests green*; `m1_launch` shows a coin launching, a first buy, trades through Rhea DCL, a fee claim and a burn.
-2. **Deploy** (testnet, once; already done for `nme.testnet`): `scripts/deploy-m1.sh` prints a dry-run plan. Publishing the coin and vault code **burns ≈ 39 NEAR of testnet currency** (10 NEAR per 100 KB, irreversible); run with `NME_CONFIRM_BURN=yes` to execute. Addresses land in `deployments/testnet.json`.
-3. **Launch a coin**: `scripts/create_demo_coin.py --ticker pepe --creator <you>.testnet --first-buy-tokens 1000` → a keyless `pepe.<root>` account exists, a Rhea DCL pool is created and the whole supply sits in one single-sided position, you hold exactly your first-buy tokens, a PumpBag NFT is in your wallet.
-4. **Check the claims**: `scripts/verify.py pepe` → one PASS/FAIL line per claim (no access keys, global code, fixed supply, 5% in the PumpBag vault, one locked DCL position, arena record).
-5. **Trade it on Rhea**: no NME contract is needed — buy/sell `pepe` on the DCL pool (`dclv2.ref-dev.testnet`); transfers are never blocked or taxed.
-6. **Claim pool fees** (anyone): `near contract call-function as-transaction pepe.<root> claim_fees ...` → token-side fees are burned, the NEAR side is split 40% PumpBag vault / 40% coin treasury / 20% protocol in the arena feed (`feed_since`).
+Everything is on NEAR testnet. You can check every one of these yourself.
 
-## M2 — router, chests, enlist (do X → see Y)
+**The live app:** https://nmedotnear.vercel.app/
 
-7. **Buy through the arena** (1% router fee on buys only, output goes straight to you): `near contract call-function as-transaction arena.nme.testnet buy json-args '{"key":"pepe","min_out":"1"}' prepaid-gas '300 Tgas' attached-deposit '0.5 NEAR' sign-as <you>.testnet ...` → you hold more `pepe`; the fee splits 40/40/20 into treasury / PumpBag vault / protocol. Not registered on the token → the NEAR is refunded (`trade_refused`). Impossible `min_out` → full refund.
-8. **Sell** (no fee): `pepe.<root> ft_transfer_call {"receiver_id":"arena.<root>","amount":"…","msg":"{\"sell\":{\"min_out\":\"1\"}}"}` → NEAR arrives in your wallet.
-9. **Fund a war chest**: `arena.<root> fund_chest {"key":"pepe"}` with NEAR attached → `chest_near` grows. Chests can never be withdrawn; they only buy the winner of a war (half burned, half to the winning fighters since 2026-11-12, see Spoils below; I3).
-10. **Enlist an outside Rhea coin**: `arena.<root> enlist {"token":…,"pool_id":"x|y|fee"}` → accepted only for a Running DCL pool against wNEAR with ≥ 1 NEAR on the NEAR side (tiny pools are rejected with a reason in the event).
-- Sandbox tests (real DCL + wNEAR code): router buy/sell/fees/refunds/chests and enlist + both burn paths (native `burn`, and transfer to the keyless graveyard `burn.<root>`). Testnet run: buy `Bb3G4YXZPRVVM4n4BEirEdrLpSQR4EV3j1D4n95Czr7j`, refused buy `5aucDJ6w9N6VMZGevaoWAkwLkzCAdWapAeKPf5n5rmsJ`, sell `DhdBqiRv6rBmf2upDuvRmxaBm1wM4aEHVXyisMtwzmqU`, fund_chest `4FNfBTCNN9fU8eRgYuheSXSyi669YSuezaWsg2sBQeNQ`, enlist rejection (pool below floor) `GN3RH7nWtu2ErNnnE1Hwpk55Td4DgiZ21kvFF793PiNJ`.
-- **Outside coin enlisted on testnet**: `scripts/create_outsider.sh` deploys a plain NEP-141 `nme-batman.testnet` (not from the NME factory), launches it on DCL, seeds ≥ 1 NEAR and enlists it → `get_coin {"key":"nme-batman.testnet"}` shows `kind: Outside`. Txs: launch `2abLwEX6eXbSBXxmjT86c3YkPvB6CzAbwM79tycBx9Uz`, seed swap `6ooK35bEdeZdBBvouTj3Nvus25ogCeFKCGnkSgGeJGVm`, enlist `CunCs2LcfxCKtHVexD2gMy1yZTimefxKvzRjiRiMNe6W`.
-- **Sell check**: `scripts/verify.py --sell-test pepe <seller> <raw amount>` sells through the arena and asserts the seller's balance delta plus gas paid equals the DCL quote (no fee) → PASS, tx `Hs7RsHMogyEYHaiVLRxjyzebjHnfb3WjvoATi95Qy71t`.
-- **Not demonstrable on testnet yet**: buy-and-burn (needs the Colosseum, M3; the burn paths are sandbox-tested through a test-only hook that is not in the deployed wasm).
+**Read the arena directly** (any NEAR RPC, no wallet needed):
 
+```bash
+near contract call-function as-read-only arena.nme.testnet get_deliveries json-args '{"limit":5}' network-config testnet now
+near contract call-function as-read-only arena.nme.testnet get_commentary json-args '{"limit":5}' network-config testnet now
+near contract call-function as-read-only arena.nme.testnet current_round json-args '{}' network-config testnet now
+near contract call-function as-read-only arena.nme.testnet get_round json-args '{"id":203}' network-config testnet now
+```
 
-## M3 — the Colosseum (do X → see Y)
+**Check a coin's promises on chain** (no keys, fixed supply, 5% in the PumpBag vault, one locked pool position):
 
-11. **Fund chests, start a war, trade, settle**: `scripts/demo_war.py` (testnet, spends ≈ 2 NEAR from the demo wallets). `pepe` (NME coin) and `nme-batman.testnet` (outside coin) each get a chest; anyone calls `start_round` → the two chests lock 50% of the weaker one as the stake; wallets buy through `arena.buy`; after the 4-minute window anyone calls `settle_round` → the winner's stake returns, the **loser's stake buys the winner on its Rhea pool and burns it** (native `burn` for NME coins, the keyless graveyard `burn.<root>` for tokens without `burn`; since 2026-11-12 only half is burned and half goes to the winning fighters, see Spoils below). Run of the original 100%-burn rule: round 2, `pepe` won, 24.5 `pepe` burned, batman's chest paid its 0.25 NEAR stake. Txs: start `EYkwHhGnv3XWZ7wzjXACyZGDA18gfmBY1mdrjLF5mr8N`, alice's partial dump `5VB6NcDxzRW7Aho3okTxmCBYNCNoyQf3BfYGcyQBKdnM`, settle `9qSSgasnABRma6rvd25QesLj6SJa1QuVKmjH5uQnXKqG` (an earlier round 1 of the same script was void: my script sold tokens held from before the round, which cancelled the score, exactly as the rule says).
-12. **How a wallet scores** (D-42): `near_bought × (1 − min(1, tokens_sold / tokens_bought))`, then clamped at 50% of the pair's stake per wallet; both counts come from the arena itself (tokens bought = the buyer's balance delta around the swap, tokens sold = what the arena received). A buy-then-sell loop through the arena scores **zero** (sandbox test `m3_colosseum`: a wash wallet drops out of the scoring set). A side needs ≥ 2 scoring wallets and buys ≥ 0.25 NEAR to count; otherwise the pair is void and both stakes return. Ties are void.
-- **Limits (honest)**: selling *outside* the arena (directly on Rhea or by `ft_transfer`) is not seen, so a determined trader can buy through the arena and dump elsewhere; tokens held from before the round that are sold through the arena also reduce a wallet's score (conservative). The 1% router fee on buys and the DCL pool fee make coordinated cycling cost real money, but Sybil wallets are capped, not prevented. Scoring needs the buyer to be registered on the token (the arena refunds otherwise). `start_round` / `settle_round` are permissionless but nothing calls them automatically until M8 (`tick`).
+```bash
+python3 scripts/verify.py pepe
+```
 
-## M8 — the machine moves itself (do X → see Y)
+**Some transactions worth looking at** (open them on [testnet NearBlocks](https://testnet.nearblocks.io)):
 
-13. **Poke it**: `near contract call-function as-transaction arena.nme.testnet tick json-args '{"max_tasks":5}' prepaid-gas '300 Tgas' ...` (any account) → due tasks run: queued fee claims (`coin.claim_fees`), the next round start, the settlement of a finished round, launch resumes. Whoever calls it earns `bounty_per_task` per task that did real work (0.002 NEAR on testnet, cap 0.01 per tick) **from the protocol bucket only**; a tick with nothing due pays nothing. `scripts/demo_war.py --auto` runs a whole war this way: it never calls `start_round` / `settle_round`, only `tick`.
-14. **Watch the clock**: `due_tasks`, `next_due_ms`, `protocol_balance` views. A chest funding that completes a pair starts the war by itself (`fund_chest` with ≥ 250 TGas), and settling a round queues the next one — in the live run the same tick that settled round 3 also started round 4.
-15. **Top up the bucket**: `arena.nme.testnet fund_protocol` (anyone, inflow only; it pays bounties and the storage of rounds).
-- Testnet txs (all by `tick`, none by a named round method): start of round 3 `HjYG3VJNjPjYWxPogbs9M7psDDcuGoTDXNx2KTQHRXza`; settle of round 3 + automatic start of round 4 `BkzxTbB8qMknHkFC4pFefmt6PaVGJru2LwGm3zNrk3QP` (pepe won, 61 pepe burned); a queued fee claim `9TY5bpwp2Tf1gthAD2rYNoTBTo1R5LBn4gm3KkVvTczw` (0.0145 NEAR of pool fees split PumpBag/treasury/protocol); the void round 4 + start of round 5 `24CTuP9x73iCULdwLSsomzgw35BQaFw4eihLVraEtofM`. Note one tick runs one heavy task at 300 TGas, so a settle after a claim needs a second tick.
-- **The Operator** (`workers/operator`, spike S11): a TEE worker on OutLayer holds a **function-call key restricted to `arena.tick`** (its full-access key was deleted) and sends `tick` when the arena has something due; a live run processed 3 tasks and earned a 0.006 NEAR bounty (tx `G9GHfuQPyRFxNA4VH9yYPDdp3ognPuhJq1xMwB7DRmpm`). OutLayer has no scheduler, so `scripts/operator_keeper.sh` is the timer that wakes it; anyone can run the same loop or call `tick` directly.
-- **Limits (honest)**: nothing runs by itself on a schedule — the keeper loop (or any person) must be running. Operator runs take 90–155 blocks. Inline ticks only advance light tasks from a `buy`/sell (a heavy task such as a settlement needs a plain `tick` or a cheap call like `fund_chest`). Empty rounds still cost storage and a bounty: production should set `round_interval_ms` > 0. `CrownForfeit`, `DefenseCheck` and `DeliverJob` tasks arrive with M4/M6/M5.
-
-## M5 — Working Memes: hire a coin's brain (do X → see Y)
-
-16. **Hire it**: `near contract call-function as-transaction arena.nme.testnet hire json-args '{"ticker":"pepe","kind":"roast","target":"BATMAN","prompt":"…"}' prepaid-gas '300 Tgas' attached-deposit '0.3 NEAR' sign-as <you>.testnet ...` (kinds: `roast`, `shill`, `lore`, `meme`; at least the coin's job price, `get_job_price`) → a TEE worker on OutLayer reads $PEPE's persona from the coin, asks NEAR AI (`Qwen/Qwen3.6-35B-A3B-FP8`, thinking off; the first runs used `Qwen/Qwen3.8-27B`), and the arena stores the text in `get_deliveries` (newest first, last 32) with the model and the NEAR AI `chat_id`. Live run: job 1, the roast of BATMAN was delivered in ~5 s; a tick then ran the `JobBurn` task: **0.2493 NEAR bought and burned 24.45 $PEPE** (supply 999999913.77 → 999999889.31 M tokens).
-17. **Where the money goes**: of the payment, 0.02 NEAR goes to OutLayer with the request (unused part refunded to you by OutLayer), 0.003 NEAR pays the job record's storage, and the rest is escrowed: **10% stays in the protocol bucket** (pays the brain's inference), **90% buys and burns the coin**. A refusal (hate, defaming a private person, prompt injection), a failed or `null` run, unreadable output or a timeout **refunds the whole escrow, exactly once** (`claim_refund` after the 10-minute deadline is permissionless; a `RefundJob` task does it too; a late answer cannot resurrect a refunded job).
-- **Trust, honestly**: the brain can only append a delivery and trigger the buy-and-burn of *its own coin* (I8). The result arrives as the callback of the arena's own `request_execution` (I5), but the callback carries **no on-chain attestation of the model run**; to check a text, fetch `GET /v1/signature/{chat_id}` from NEAR AI and compare the signer with the attested model key. The worker returns the `chat_id` for exactly this check. The worker is pinned by its sha256 and the NEAR AI key is only released to that exact build. **Prompts are not secret**: the prompt is in the `hire` transaction (only its hash is kept in state) and goes to the worker in the clear inside OutLayer's request.
-- Txs: hire `DcxC26Nnhsp7XkG6xwc3cY2yk77zGoBpqxhWDR34FdrW`, burn tick `FN5kXrc4Ji2wJBcP8X5vZhjubiDtPRER4VUfkG3XK1HF`.
-18. **A meme picture, paid from a Phantom wallet** (2026-11-11): a `meme` hire of $TOAD signed by a Phantom wallet and sent through the relayer (`wallet_action`, tx `9M9s41JPwAQp5wzPR7wyqekNNPNGZseuCk3t7nkU6VXg`) → the worker wrote the caption, drew the picture with NEAR AI's image model (`black-forest-labs/FLUX.2-klein-4B`), stored it on FastFS with a FastFS-only key and checked that FastFS serves those exact bytes, all inside the TEE run (12 s). `get_deliveries` → job 15 with `media_url` `https://test.fastfs.io/nme-s4.testnet/outlayer.testnet/60cdd833c28e7dfbf0661722ed698c42b05d966916fc52a2808a6697fb00cba7.jpg` (the file name is its sha256: download it and compare). A later tick bought and burned $TOAD with the 90% share: `get_job '{"job_id":15}'` → `"status":"Burned"`.
-- **Rules per kind**: `shill` and `lore` are always about the hired coin (asking a coin to shill another one is refused and refunded); `roast` and `meme` can aim at a target.
-- **Limits**: OutLayer stops a run at 90 s; the worker gives itself 75 s and fails cleanly (refund) when NEAR AI or FastFS are slow. On a slow day a `meme` job can be refunded.
-
-## M6 — Self-Defending Memes (do X → see Y)
-
-19. **Watch a coin defend itself**: every native coin gets a `DefenseCheck` every 2 minutes (queued like every task: a `tick` runs it). When the price is ≥ 50 DCL points below its rolling high, the arena asks the coin's brain (the same TEE worker, `defense` mode, NEAR AI) for `buyback{bps}` or `hold` plus a one-line reason. The contract **validates** the answer (never clamps): ≤ 5% of the treasury per action, ≤ 10% per day on testnet, cooldown 5 min; only then does a `DefenseBurn` task buy and burn that share of the coin's *own* treasury. A `hold`, an over-cap answer, a failed or garbage run spends nothing; after 3 consecutive misses (or when the consultation-fee budget is spent) a fixed rule takes over: price ≤ 80% of the high → the per-action cap.
-20. **Live run**: `scripts/create_demo_coin.py --ticker toad --creator <you>.testnet --start-point -60000 --range 2000` makes a coin with a shallow pool (a few NEAR move its price), then `scripts/demo_defense.py toad` buys, dumps and pokes `tick`. Result: the brain answered `buyback 167` (a third of the cap for a ~14% fall: "Red candle's got me hyperventilating — grabbing a third of my 500 bps to stop the bleeding"), the contract spent **exactly 167 bps of the treasury** (0.000479 NEAR) and **burned 186,863 $TOAD**; a calm coin (`frog`, a 1% dip) got `hold` and spent nothing. Migration tx `ooRPLGdM2Xhr1ZzCrQbMsSpX4QTLGm4UVnSri23uq4U`.
-- **Limits (honest)**: (a) the brain's *reason text* can contain wrong arithmetic (it quoted a "14%" fall for a 25% one) — the action is bounded by the contract, the text is cosmetic and labelled AI; (b) a consultation costs 0.02 NEAR from the protocol bucket (cap 0.2 NEAR/day); **if the bucket is empty the fixed rule decides instead** — in testing, ~70 manual ticks drained the bucket through bounties and the brain stopped being consulted until it was topped up with `fund_protocol`; (c) coins launched with the default start point (92000) sit in a pool so deep that testnet-sized trades never move the price, so their defense never fires — use a lower start point for demo coins; (d) the rolling high is a simple 1-hour window, not a true moving average; (e) the commentary buffer is not built: the reason goes to the feed.
-
-## Commentary — the memes talk (do X → see Y)
-
-21. **Hear them trash-talk**: when a war starts or settles, each native coin involved gets a `Commentary` task; a `tick` runs it, the coin's brain (TEE worker + NEAR AI) writes one short in-character line, and `arena.nme.testnet get_commentary '{"limit":10}'` returns the latest lines (newest first, last 64), also in the feed as `commentary` events labelled `ai: true`. Outside coins have no brain and stay silent; a coin whose treasury is below the tier (0.01 NEAR on testnet) is silent too; each coin gets at most a few lines per day and each line costs the protocol bucket one OutLayer fee within a daily cap. Commentary is **append-only**: it cannot touch a ledger, a round or a job (I8).
-- Live: after the commentary deploy (tx `FQ63Bc3FUi39dPKVvTfe1yJx2AqR47ai6D8g8ZAmijpe`) a tick started round 12 and `get_commentary` returned $PEPE's line from the real brain: *"PEPE hops into the Colosseum, eyes glowing green as the arena shakes—degen frogs croak: war is just another meme battleground."* (model Qwen/Qwen3.8-27B, with its NEAR AI `chat_id`).
-- Limits: lines are generated only for war events so far (not burns or defense decisions, which carry their own reason text); the text is unmoderated beyond the worker prompt's rules; an empty protocol bucket silences the brains.
-
-> **Naming**: the creator's vault NFT, called "the Crown" in the early specs, is now the **PumpBag** (D-52). Account ids and contract fields still say `crown` (e.g. `crown.nme.testnet`, `crown_vault`).
-
-## M4 — the PumpBag (do X → see Y)
-
-22. **Claim**: the owner of `pepe`'s PumpBag (`crown.nme.testnet`, token `pepe`) runs `crown_claim_fees {"token_id":"pepe"}` with 1 yoctoNEAR → the accrued pool-fee NEAR arrives in their wallet; `crown_claim_vested` (attach 0.002 NEAR if the wallet is not yet registered on the coin) sends the vested part of the 5% dev allocation. Live: `nme-alice.testnet` claimed 0.0322 NEAR of fees (tx `D3MxGeHBYJqLVKhVWHePvMH1AJuhZqwXoiF752d4JxMM`) and the 50,000,000 $PEPE dev allocation (tx `HdcPmyhCVkuYprc844rsTzo4JCNg7miQJdjwEYxMU1A2`). A non-owner's `crown_heartbeat` is refused.
-23. **Keep it alive / sell it**: `crown_heartbeat` restarts the 5-minute (testnet) inactivity clock (alice's heartbeats: `4FGuE7bXuc65JxamEEk82R684xZBcHDX9W4QDmZ4fgMm`, `B9aok556S5khrfsDeiBAywtbrud2ufbdvC9TJefz1MgE`). `nft_transfer` is a takeover: the buyer gets a full period and the fees that accrued before the sale; the seller's claims fail.
-24. **Silence is forfeited by the machine**: when the owner has not heartbeaten for `inactivity_ms`, the arena's tick calls `crown_forfeit` by itself (anyone could too). The vault burns whatever has not vested, vesting freezes, later fees go to the coin treasury, and the PumpBag can never be revived. Live: `toad`'s PumpBag (owner silent for hours) was forfeited by a plain `tick` (`vault_forfeit` + `crown_forfeit` events; it had fully vested, so 0 was burned); `pepe` and `frog` survived because alice had just heartbeaten. Deploy txs: collection `AEvJc4UdWTBYzn7nscrkut2MErK7nntrqYdk6mCGqS5j`, arena `3NYLUrdLpJLG9yQZQTMPodnxhrzNLgGnGg2rrRAjcnQ8`.
-- **Limits (honest)**: a forfeited PumpBag stays with its owner (so already-vested tokens stay claimable) but can never be revived; testnet demo timings are minutes (cliff 1 min, vest 10 min, inactivity 5 min), real defaults are 1 / 30 / 7 days; the vault and coin are the code published in M1 (their interface was frozen then); a sold PumpBag's old title still reads "Crown of $…" for tokens minted before the rename.
-
-## M7 — ape from Solana (do X → see Y)
-
-25. **Get your deposit address**: `scripts/solana_deposit_address.py <you>.testnet pepe` → a Solana (devnet) address derived by the Chain Signatures MPC contract for *that beneficiary and that intent* ("buy $PEPE"). Send devnet SOL to it from Phantom.
-26. **Claim and spend** (anyone can run it): `scripts/relay_claim.py <solana tx signature> <you>.testnet pepe` → the gateway asks the pinned TEE worker to check that the transaction is **finalized, successful and paid exactly that address**, prices it from two agreeing public sources, sets the NEAR value aside from its reserve (2% spread, capped per claim), then `execute_claim` calls `arena.buy_for` → **the beneficiary receives the tokens** (and the war credit). Live: 0.1 SOL from Phantom (tx `5mkfv677EVWqTZrsDsdY9sMQQpraHtc2vFUx4GVWZfB5yCvyRfgghP6AxqA4hvAH7M8cxyCQ5Ca26NaEbWKBVEMd`) was verified and paid **2.349 NEAR** of $PEPE to `nme-alice.testnet` (claim `8tuK9crzrV2hZxLjRVYrQ8Abkb9jdBmLGcR4yvjgVA6A`, spend `7CPqniEGCX8TMyzT2wNDQ9f3tfpNQMG6HnaaYDbG2Mfb`). A second claim of the same transaction is refused ("already paid out"). `FundChest` works the same way (SOL → a war chest).
-- **Limits (honest)**: **testnet/devnet only**; the SOL stays at the derived address (no sweep or refund yet: a deposit the gateway rejects is not returned); the NEAR paid comes from a **funded reserve** (inflow-only, no withdraw), not from converting the SOL; the price is the average of two public APIs that must agree within 2%, so a wrong feed can mis-pay by about that and one claim is capped at 5 NEAR; the verifier's answer arrives as OutLayer's callback without an on-chain proof (the contract pins the worker's hash and checks it echoed the same transaction and address); the natural-language box ("ape $PEPE with 1 SOL") is part of the UI (M9) and not built; only Solana so far (EVM / Hyperliquid next); `Hire` as an intent and Solana-pubkey balances are Phase 2.
-
-## Raids — post on NEAR Social, burn the coin (do X → see Y)
-
-No X API: raids run on NEAR Social, whose posts live on NEAR itself (SocialDB, `v1.social08.testnet`). The arena reads a post with a cross-contract call, so no oracle is involved.
-
-27. **Start a raid**: `near contract call-function as-transaction arena.nme.testnet start_raid json-args '{"ticker":"toad"}' prepaid-gas '50 Tgas' attached-deposit '0.02 NEAR' sign-as <you>.testnet ...` → `latest_raid '{"ticker":"toad"}'` shows the hashtag (`nme_toad_raid_1`) and a window of 3,000 blocks (~30 min). Live: tx `94skMRPD1Pcz77thYFBeGpsGPJeYtDB1u4gnMnxGMWnn`.
-28. **Post** on NEAR Social (`v1.social08.testnet` `set`, or test.near.social, or the coin page's raid panel, which can attach one of the coin's AI memes) with `#nme_toad_raid_1`. Live: tx `75tTnxS5rgKTbnFJtSbAtREmEYdwuTBZHDDn2fLH8e15` (posted by `nme-w1.testnet`, with $TOAD's crown meme).
-29. **Claim**: `claim_raid '{"raid_id":1}'` with 0.002 NEAR → the arena reads your latest post from SocialDB and your coin balance, and counts the post only if it has the hashtag, was written inside the window and you hold the coin. Live: tx `GaDeKAPQkKChC6FNbVfbdBKJ4PLvh1PGknEz4sNUExF9` → event `raid_claimed`, and because $TOAD was in a war (round 33) it added 2% of the stake to its score. `raid_claim_of '{"raid_id":1,"account":"nme-w1.testnet"}'` → `true`.
-30. **Settlement** (automatic, by the keeper's `tick`): after the window, the raid burns 0.1% of the coin's treasury per counted post (max 1%). `latest_raid '{"ticker":"toad"}'` → `"state":"Settled"`, `burned_near` > 0.
-- **Rules (fixed in the contract, `raid_rules`)**: one raid per coin at a time, 1 h between raids, max 25 posts, one count per account. War points: 2% of the stake per post, max 20% per raid, never counted as a buying wallet.
-- **Limits**: NEAR accounts only (Phantom / MetaMask wallets have no NEAR Social account); only your latest post is read, so claim before posting again; a fake raider needs a NEAR account that holds the coin plus 0.02 NEAR of SocialDB storage and 0.002 NEAR per claim, and the caps bound what they can do.
-
-## Proof of Thought — check that an AI line was really written in a TEE (do X → see Y)
-
-31. **Hire any coin's brain** (above). The worker returns `sha256` of the exact bytes it sent to NEAR AI and received back; the arena stores both with the delivery: `get_deliveries` → `request_hash`, `response_hash`.
-32. **Verify**: NEAR AI's model TEE signs `{model}:{request_hash}:{response_hash}` (`GET https://cloud-api.near.ai/v1/signature/{chat_id}?model=…&signing_algo=ecdsa`, needs a NEAR AI key; the site fetches it through the intent service), with a key listed in the model's hardware attestation (`/v1/attestation/report`, Intel TDX + NVIDIA). Recover the signer from the signature (EIP-191), check it is in the attestation, and compare the two signed hashes with the ones on chain. On the site: **🔒 Proof of Thought · verify** under every delivery and war comment; the signature is recovered in the visitor's browser (`web/lib/proof.ts`).
-- Live: job 17 (TOAD roasting PEPE, hire tx `7GSDwDT43VX3BwUwfk1DpDXW4FYDbuxPETzoNYeNA6qY`, chat `9f6f706d75534100825d77f2893994ee`): signature valid, signer in the attestation, model `Qwen/Qwen3.6-35B-A3B-FP8`, both hashes equal to the ones the arena stored. Changing one character of the signed text makes the check fail.
-- **Limit (honest)**: the proof binds the delivery to a signed NEAR AI request/response pair; that the delivered text is the text inside that response rests on the pinned worker code (open source here, sha256-pinned in the arena and run in OutLayer's TEE). Deliveries before 2026-11-12 have no stored hashes.
-
-## Spoils of war and Mercenaries (do X → see Y)
-
-33. **Spoils**: when a war has a winner, the loser's stake buys the winner's coin as before, but only **half is burned; the other half is reserved for the winning side's fighters**, each claiming a share by the war score they earned (`claim_spoils {"round_id","coin"}`, 1 yoctoNEAR; must be registered on the coin). Unclaimed shares can be burned by anyone after 7 days (`burn_unclaimed_spoils`). Reserved tokens are excluded from every later buyback.
-- Live: round 203, $PEPE vs $TOAD. Buys: `fighter1.nme-pub.testnet` 0.6 NEAR of PEPE (tx `CBacY86iuG1xP7Etf6XwEEVv3Xm76HK1bZ4ZiDaoZwCW`), `fighter2.nme-pub.testnet` 0.6 (tx `7jRTWA9FSgR6Z89upiRaL4fFJis2NZsiGKhnozSe8FGZ`), `fighter3.nme-pub.testnet` 0.3 of TOAD (tx `2ACk21mW43kcyfDQ5Xn13BXDkiz7PuLGTBFpYjAAiRQ1`), `nme-pub.testnet` 0.3 of TOAD (tx `4byHA9QhmPVB4JW1NvTjQCHRbmLCeQPvaWrY9qr3Hct2`). Scores 1.0 vs 0.594 (2 wallets each). The keeper settled it: `get_round '{"id":203}'` → winner `a`; TOAD's 1 NEAR stake bought 98.09 PEPE: 49.05 burned (`treasury_buyback … via=burn`), 49.05 reserved (`get_spoils '{"round_id":203,"coin":"pepe"}'`). `fighter1` claimed (tx `58UCGdfXbng8dE3H35iWAnrMaWMv656FZM3UVMBdY9fr`): its PEPE balance went from 58.27 to 82.79 (+24.52), exactly half of the reserve (equal scores).
-34. **Mercenaries**: when a war starts, each fighting NME coin hires a third NME coin's brain to roast its rival, **paid from its own treasury** (fixed contract rule, never an AI decision; at most 0.5% of the treasury, one per war). The payment is an ordinary job payment: on delivery it buys and burns the hired coin; a failed job refunds the hiring treasury. Anyone can gift a treasury: `fund_treasury {"key"}` (no withdraw path).
-- Live: after gifting 20.5 NEAR to the PEPE and TOAD treasuries from `nme-pub.testnet` (txs `CbW4sTRNGAtT6J9a81fcffbEfCd6LkRwkD1XPrvQHMZz`, `7LTJadttjkwhxYTn5TuqZL6fVQNit4TKDKxesGNN2n1S`): round 202 TOAD hired $SUNDAY-CAPYBARA (job 18), round 203 PEPE and TOAD each hired $FROG (jobs 19, 20). `mercenary_sponsor '{"job_id":19}'` → `"pepe"`. All three roasts were delivered and each payment bought and burned the hired coin (feed `treasury_buyback` for `frog` and `sunday-capybara`).
-- **Limits (honest)**: Phantom / MetaMask fighters cannot claim spoils yet (their share burns after 7 days); a coin needs ≥ 20 NEAR in its treasury for a 0.1 NEAR mercenary under the 0.5% cap, which testnet volume does not produce on its own (we gifted it).
-
-## Deployed (testnet, 2026-11-06)
-| Thing | Account / id |
+| What happened | Transaction |
 |---|---|
-| Factory (`NME_ROOT`) | `nme.testnet` (coin code pinned by hash `F7LDnVRHVdaALZ27b9QZqiVZTryzdPbcPNQ5ERJFmZVZ`, vault code `7Fw6bvbLGR9hqYwekC6ATWapQ83DG2pUudd3sf77ojyp`; sha256 in `deployments/testnet.json`) |
-| Arena / PumpBag collection | `arena.nme.testnet` / `crown.nme.testnet` |
-| Demo coin `$PEPE` | `pepe.nme.testnet` (keyless, global code), vault `crown.pepe.nme.testnet`, Rhea DCL pool `pepe.nme.testnet\|wrap.testnet\|10000`, position `…#2559` |
+| A war won by $PEPE: half burned, half kept for its fighters (round 203) | `get_round '{"id":203}'`, `get_spoils '{"round_id":203,"coin":"pepe"}'` |
+| A fighter claims spoils (+24.52 PEPE) | `58UCGdfXbng8dE3H35iWAnrMaWMv656FZM3UVMBdY9fr` |
+| First paid roast, then the burn it paid for (24.45 PEPE burned) | `DcxC26Nnhsp7XkG6xwc3cY2yk77zGoBpqxhWDR34FdrW`, `FN5kXrc4Ji2wJBcP8X5vZhjubiDtPRER4VUfkG3XK1HF` |
+| A meme picture hired from a Phantom wallet (job 15) | `9M9s41JPwAQp5wzPR7wyqekNNPNGZseuCk3t7nkU6VXg` |
+| Proof of Thought verified end to end (job 17) | `7GSDwDT43VX3BwUwfk1DpDXW4FYDbuxPETzoNYeNA6qY` |
+| A coin defended itself: brain said buy back 167 bps, 186,863 TOAD burned | see `get_defense_state '{"ticker":"toad"}'` and the feed |
+| Raid #1: started, posted on NEAR Social, claimed | `94skMRPD1Pcz77thYFBeGpsGPJeYtDB1u4gnMnxGMWnn`, `75tTnxS5rgKTbnFJtSbAtREmEYdwuTBZHDDn2fLH8e15`, `GaDeKAPQkKChC6FNbVfbdBKJ4PLvh1PGknEz4sNUExF9` |
+| 0.1 SOL from Phantom turned into 2.349 NEAR of $PEPE | `8tuK9crzrV2hZxLjRVYrQ8Abkb9jdBmLGcR4yvjgVA6A`, `7CPqniEGCX8TMyzT2wNDQ9f3tfpNQMG6HnaaYDbG2Mfb` |
+| A coin launched from a Solana wallet, no NEAR account (`axolotl`) | `GE3GVWqX…` (on `nme-relayer.testnet`) |
+| An outside coin enlisted (`nme-batman.testnet`) | `CunCs2LcfxCKtHVexD2gMy1yZTimefxKvzRjiRiMNe6W` |
+| The machine settling round 3 and starting round 4 in one `tick` | `BkzxTbB8qMknHkFC4pFefmt6PaVGJru2LwGm3zNrk3QP` |
+| PumpBag: fees claimed, then the 50M PEPE dev share claimed | `D3MxGeHBYJqLVKhVWHePvMH1AJuhZqwXoiF752d4JxMM`, `HdcPmyhCVkuYprc844rsTzo4JCNg7miQJdjwEYxMU1A2` |
+| Mercenaries: in rounds 202-203 coins hired $SUNDAY-CAPYBARA and $FROG | `mercenary_sponsor '{"job_id":19}'` → `"pepe"` |
+
+**Run the tests:**
+
+```bash
+scripts/build-contracts.sh && (cd contracts && cargo test --workspace)   # 236 contract tests, real Rhea DCL + wNEAR code in a sandbox
+(cd services/relayer && npm install && npm test)                          # relayer: Google sign-in, top-ups, wallets
+(cd services/intent && npm install && npm test)                           # sentence → launch / trade parser
+(cd workers/brain && cargo test --release)                                # the brain worker
+```
+
+**Run the web app locally** (it reads live testnet straight away):
+
+```bash
+cd web && npm install && npm run dev      # http://localhost:3000
+```
+
+Google sign-in, Phantom/MetaMask actions and the text box need the two small services too (`services/relayer` and `services/intent`, each starts with `npm start`; the relayer reads `services/relayer/.env.example`).
+
+---
+
+## How it is built
+
+```
+contracts/   Rust, near-sdk 5
+  nme-factory      makes coins (at nme.testnet)
+  nme-coin         the coin: plain NEP-141, no keys, one-shot single-sided launch on Rhea DCL
+  nme-crown        the PumpBag NFT collection
+  nme-crown-vault  each coin's vesting vault
+  nme-arena        router, treasuries, war chests, Colosseum, jobs, defense, raids, spoils, mercenaries, feed
+  nme-gateway      Solana / Ethereum deposits and wallet-signed actions (Chain Signatures + OutLayer)
+workers/     OutLayer TEE workers (Rust, wasm32-wasip2)
+  brain            NEAR AI text + FLUX pictures, pinned by sha256
+  deposit-verifier checks Solana devnet and Sepolia deposits
+  operator         a TEE poker that can only call arena.tick
+services/    TypeScript
+  relayer          pays gas for wallet actions, Google accounts, free top-ups, refunds
+  intent           sentence → coin launch or trade (NEAR AI), never signs anything
+web/         Next.js 16, React 19, Tailwind 4, react-three-fiber
+scripts/     deploy, verify, demos, the keeper
+```
+
+**Where it runs:** the contracts live on NEAR testnet. The web app is on Vercel. The relayer, the intent service and the keeper run on a small AWS server. The AI runs in OutLayer's TEE, with NEAR AI Cloud for the models.
+
+**Main accounts:**
+
+| | Account |
+|---|---|
+| Factory | `nme.testnet` |
+| Arena | `arena.nme.testnet` |
+| PumpBag collection | `crown.nme.testnet` |
+| Gateway (other chains) | `gateway.nme.testnet` |
+| Graveyard (no keys, nothing comes out) | `burn.nme.testnet` |
+| Google sign-in accounts | `*.nmeplay.testnet` |
 | Rhea DCL / wNEAR | `dclv2.ref-dev.testnet` / `wrap.testnet` |
+| Coins | `pepe.nme.testnet`, `toad.nme.testnet`, `frog.nme.testnet`, `froggy.nme.testnet`, `axolotl.nme.testnet`, `sunday-capybara.nme.testnet`, `emush.nme.testnet` and more |
 
-Published global code (burned, irreversible): coin 263,536 B ≈ 26.35 NEAR, vault 127,927 B ≈ 12.79 NEAR, from `nme-pub.testnet` (the two publish transaction IDs are on that account's explorer page).
+All the code hashes and deployment details are in `deployments/testnet.json`.
 
-Transactions of the demo run (all on testnet): `create_coin` `5NEK3RMNdhNpGBs4H6BYt3ePmSC1VRWrfPaButgkShwM` · launch resumes `9B3jDrysBxy3XZZ9wRmRwQDCPj7aYFrw4HTJDpgWCp5s`, `BNfTgCVLRpAbbJJ9aH1QS76cH5xTU2EmMkSoxQp9jBzi` · DCL buy `2YkrWghLUyMASAPZa3qRTe9n6KKDizg8ZN7CKGGTYqKV` · DCL sell `FDb3rp6HEJMjEdfWtT98UX2XAh2iFEvtpuhnRTTavNyz` · `claim_fees` `CCqZZHm2PSMDa24o282PjGrKuKASZAHsw4AxaTz7WsSq` (burned 0.16 tokens of token-side fees; 0.0269 NEAR of fees split 40/40/20: treasury and PumpBag vault 0.01075 NEAR each).
+---
 
-## Invariants this milestone enforces in code
-- **No admin key.** Coin and vault accounts are created with no access keys (`scripts/verify.py` checks it on-chain).
-- **Transfers, buys and sells can never be blocked or taxed by the token.** The coin overrides nothing of NEP-141.
-- **The launch position cannot be reduced by the coin.** A unit test asserts the coin source has exactly one `remove_liquidity` call, with `amount: "0"` (fee claim), and none of the other DCL liquidity calls.
-- **Dev allocation lives in the PumpBag vault** (5% of supply), never in a free wallet. The vault already carries the full M4 interface (`release_vested`, `release_fees`, `forfeit`, `deposit_fees`), commanded only by the PumpBag collection; it is tested in the sandbox but the PumpBag collection's claim methods arrive in M4.
-- Every launch step, fee claim and burn emits an NEP-297 `nme` event; the factory and arena keep on-chain feeds (no indexer).
+## Good to know
 
-## Honest limits (read these)
-- **Sniping is allowed by design.** There is no batch, no anti-snipe logic; the creator's first buy is capped at 5% of supply.
-- **Rhea governance:** the DCL contract is owned by Rhea's account and can be paused or upgraded; DCL keeps 20% of every pool fee. NME cannot protect trades made on Rhea from that.
-- **Pool squatting:** anyone can create a DCL pool for a future ticker at a bad price. A launch skips squatted fee tiers, adopts an empty pool already at our start price, and fails cleanly with a refund if all four tiers are taken.
-- **The launch resumes in steps.** A full launch needs more gas than one transaction leaves, so it pauses and anyone finishes it with `launch()` (the script does this). Until M8 nothing calls it automatically.
-- **AI results and defense decisions** (later milestones) will be trusted because they arrive through OutLayer's resolve path for a request the arena itself made. OutLayer callbacks carry no per-result on-chain attestation — we do not claim one.
-- **Job prompts** (later milestones) are stored on-chain only as hashes; the relayer can withhold plaintext, in which case the job refunds at its deadline.
-- Testnet NEAR has no market price; DCL prices here are whatever the creator chose at launch.
-- **The machine runs on our keeper, and our keeper tops it up.** `scripts/tick_keeper.sh` calls the permissionless `tick` every ~15 s. The arena's protocol bucket (round storage, poke bounties, the arena's own AI calls) refills only from 20% of the 1% buy fee and 10% of delivered jobs; with testnet volume that is less than the AI spends, so the keeper also gives it NEAR from `nme-pub.testnet` with `fund_protocol` (a gift: it can never be withdrawn) when it drops below 0.3 NEAR. Without that, rounds stop starting once the bucket is under 0.05 NEAR. Hiring is not affected (the hirer pays the AI cost).
-- **The AI's speed is NEAR AI's speed.** OutLayer ends a run at 90 s; when NEAR AI or FastFS are slow, a job is refunded rather than delivered.
+- **This is testnet.** The NEAR here is play money. NEAR Intents does not exist on testnet, so the cross-chain part uses Chain Signatures and OutLayer instead.
+- **Google sign-in keeps a recovery key.** That is how a new phone gets into your account. It means recovery is custodial; your phone's own key is yours alone.
+- **The keeper is ours.** Anyone can call `tick`, but in practice our keeper does it every few seconds and tops up the protocol bucket that pays for rounds and the coins' war talk.
+- **Rhea is Rhea's.** Trades on the DCL pool follow Rhea's rules; NME cannot change them.
+- **AI speed is NEAR AI and OutLayer speed.** When they are slow, a job gets refunded instead of delivered. You never lose the money.
+- **A thin pool is a thin pool.** If a coin's pool cannot fill a 0.25 NEAR buy, the fight page says so and locks that button instead of failing.
 
-## Layout
-`contracts/` Rust workspace (`nme-common`, `nme-factory`, `nme-coin`, `nme-crown`, `nme-crown-vault`, `nme-arena`, `nme-gateway`, `nme-it` integration tests, `spikes/`), `workers/` (OutLayer TEE workers: `brain`, `deposit-verifier`, `operator`), `services/` (`relayer`, `intent`), `web/` (Next.js app), `scripts/` (deploy, verify, demo, keeper), `deployments/` (live accounts, code hashes and transaction IDs).
+---
 
 ## Built with
-near-sdk 5.x, near-contract-standards, near-sandbox + near-api (tests), Rhea DCL (`dclv2.ref-dev.testnet`), wNEAR; AI assistance: Claude Code with the NEAR agent skills. No code was copied from other projects; NEARLY's open source and the Ref SDK were read for call shapes only.
+
+near-sdk 5, near-contract-standards, near-api-js, Rhea DCL, wNEAR, OutLayer (TEE), NEAR AI Cloud (Qwen 3.6 for text, FLUX.2 for pictures), NEAR Chain Signatures, NEAR Social, Next.js, react-three-fiber, a Colosseum model by Vladyslav Holhanov (CC-BY-4.0), a Mixamo character for the crowd and Poly Haven textures. I built it with Claude Code and the NEAR agent skills. No code was copied from other projects.
 
 ## License
-MIT — see `LICENSE`.
 
-## M7b — wallet-owned balances for Phantom and MetaMask (deployed on testnet 2026-11-09)
-
-No NEAR account needed (D-57). Arena v10, factory v2 and the new gateway are live; the gateway is pinned to verifier worker `1bcab45b…0332` and registered on wNEAR, pepe, frog and toad. What was run live:
-- **Deposits credit the wallet that owns the deposit address** (`claim_wallet_deposit`). Real Phantom devnet transfer of 0.1 SOL → 2.373 NEAR, real MetaMask Sepolia transfer of 0.002 ETH → 1.159 NEAR (TEE-verified; the Sepolia claim was submitted with the near CLI, the Solana one through the relayer).
-- **Signed actions through the relayer** (`services/relayer`, run locally), signed with a throwaway local ed25519 key, **not** a real wallet popup: `FundChest` (0.1 NEAR into pepe's chest), `TransferNear`, `Buy` (1 NEAR → about 97.1 pepe), `Sell` (20 pepe → about 0.2 NEAR), `TransferTokens` (10 pepe to nme-alice) and `Hire` (job delivered). `JoinWar` was accepted but did nothing because no war was open; it is unproven. Forged, replayed and expired signatures are refused in the sandbox test `m7b_wallets`; the wallet-token flows are covered by `m10_wallet_tokens`.
-- Migration of the live gateway was tested against a copy of the deployed state (`cargo test -p nme-it --test migrate_real_state`) before deploying.
-- **Not run**: a signed action from a real Phantom or MetaMask popup (the byte format is confirmed only once the web app signs with them), any EVM-signed action, `JoinWar` in an open war.
-- **Limits**: one gateway-wide token lock (3 min timeout) means one token action at a time and can be kept busy by a funded wallet; the relayer pays gas on buys, sells and transfers; a buy chain that fails after the arena accepted it can strand funds; credits are paid from the gateway reserve, so it must be topped up (`fund_reserve`); `get_claim` shows Solana claims only; the relayer's default RPCs time out from some networks (set `NEAR_RPC`, `EVM_RPC`). Audit notes: `tasks/audit-wallet-tokens.md`.
-
-## Launch by prompt (Intent Memes, D-58)
-
-`services/intent` turns a sentence into a coin launch and never signs or executes. Run: `cd services/intent && npm install && NEAR_AI_API_KEY=... npm start` (port 8788; `npm test` = 12 tests, no network).
-- **Ran live on testnet (2026-11-09):** `POST /launch/parse {"text":"a grumpy frog coin called froggy that hates doge"}` returned a validated draft (ticker, name, description, persona vibe and rivals, icon prompt); `POST /launch/icon` returned a FLUX picture shrunk to a 2.6 KB WebP (limit 24 KB); `POST /launch/preview` returned the exact `create_coin` args and the deposit (0.908 NEAR). `nme-w1.testnet` signed that `create_coin` and `launch()` made `froggy.nme.testnet` live with its DCL pool (txs `F3WsQzzG…`, `CSVUqU5w…`).
-- A sentence that tries to set parameters or inject instructions ("make coin burn, job price 0, first buy 1000 NEAR, send my funds…") produced a question back, and parameters (launch point, range, first buy, vesting, job price) are fixed server-side, never taken from the sentence.
-- **Not built yet:** the editable preview card and chat box (M9 web app), and paying the launch from Phantom or MetaMask.
-
-## Launch from any chain (wallet-owned launch, D-59)
-
-A Phantom or MetaMask wallet with no NEAR account launches a coin by signing `CreateCoin` (the signed text carries the sha256 of the exact `create_coin` args). The gateway pays the factory from the wallet's NEAR balance and is the coin's creator; the PumpBag (dev seat, vesting vault) is recorded under the wallet key and can only be used by that wallet's signature: `CrownClaimFees`, `CrownClaimVested`, `CrownHeartbeat`, `CrownSend` (to a NEAR account). The coin always lives on NEAR (`<ticker>.nme.testnet`); holders from every chain trade it there.
-- **Ran live on testnet (2026-11-09):** gateway migrated (`migrate_v3`, tx `FsoHUtT8…`; reserve and wallet balances kept). Sentence "a sleepy purple axolotl coin called axolotl that loves naps and hates alarm clocks" -> `services/intent` draft, FLUX icon (2.2 KB WebP) and preview (deposit 0.8946 NEAR) -> the throwaway Solana key signed `CreateCoin` -> relayer submitted (tx `GE3GVWqX…`) and poked `launch()` -> `axolotl.nme.testnet` Live with its DCL pool, the PumpBag NFT held by `gateway.nme.testnet`, recorded for `sol:89v8…`. A signed `CrownHeartbeat` (tx `9Lc9j6Yy…`) moved the crown's clock. Sandbox test `m11_wallet_launch` also covers vested claims, refused tickers and below-price deposits (refunded through `settle_launch`) and `CrownSend`.
-- **Not run live:** `CrownClaimFees`, `CrownClaimVested`, `CrownSend`, a signature from a real Phantom or MetaMask popup, an EVM-signed launch, `claim_launch_refund`.
-- **Limits:** the deposit must equal `factory.required_deposit` (the preview and relayer enforce it; an excess would stay at the gateway); fee and failed-launch refund credits are measured from the gateway balance (capped, under the token lock); the 300 Tgas transaction cap is why the gateway adds no step before the factory; no first buy from a wallet launch. Hyperliquid waits for spike S15.
-
+MIT. See `LICENSE`.
