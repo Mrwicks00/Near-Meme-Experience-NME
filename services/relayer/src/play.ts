@@ -3,7 +3,7 @@
 // device: no wallet app, no popups) plus a recovery key the relayer holds, and sends starter NEAR. On a new phone,
 // signing in with Google again makes the relayer add that phone's key with the recovery key.
 // Honest trust note: recovery is custodial (the recovery key can add keys); the README says so. Testnet only.
-import { createPublicKey, verify as rsaVerify } from "node:crypto";
+import { createPublicKey, verify as cryptoVerify, verify as rsaVerify } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { Account, JsonRpcProvider, KeyPairSigner, PublicKey, actions, type KeyPairString } from "near-api-js";
@@ -85,6 +85,8 @@ export interface PlayChain {
   hasKey(accountId: string, publicKey: string): Promise<boolean>;
   create(accountId: string, devicePk: string, starterYocto: bigint): Promise<string>;
   addDeviceKey(accountId: string, devicePk: string): Promise<string>;
+  balance(accountId: string): Promise<bigint>;
+  send(accountId: string, yocto: bigint): Promise<string>;
 }
 
 export class NearPlayChain implements PlayChain {
@@ -126,6 +128,14 @@ export class NearPlayChain implements PlayChain {
     });
     return out?.transaction?.hash ?? "";
   }
+  async balance(accountId: string) {
+    const a = (await this.provider.viewAccount({ accountId })) as unknown as { amount: string | bigint };
+    return BigInt(a.amount);
+  }
+  async send(accountId: string, yocto: bigint) {
+    const out: any = await this.parent.signAndSendTransaction({ receiverId: accountId, actions: [actions.transfer(yocto)] });
+    return out?.transaction?.hash ?? "";
+  }
   async addDeviceKey(accountId: string, devicePk: string) {
     const user = new Account(accountId, this.provider, this.recoverySigner);
     const out: any = await user.signAndSendTransaction({ receiverId: accountId, actions: [actions.addFullAccessKey(PublicKey.from(devicePk))] });
@@ -134,6 +144,21 @@ export class NearPlayChain implements PlayChain {
 }
 
 const NAME = /^[a-z0-9](?:[a-z0-9]|[-_](?=[a-z0-9])){2,19}$/;
+const NEAR = 10n ** 24n;
+export const TOPUP = { below: (6n * NEAR) / 10n, to: NEAR, everyMs: 12 * 3_600_000, perDay: 10n * NEAR, maxAgeMs: 5 * 60_000 };
+
+/** The text the phone signs to ask for a top-up (no Google popup: proves it holds a key of the account). */
+export const topupMessage = (account: string, ts: number) => `nme-topup:${account}:${ts}`;
+
+function ed25519Ok(publicKey: string, message: string, sigB64: string): boolean {
+  try {
+    const raw = PublicKey.from(publicKey).data;
+    const key = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: Buffer.from(raw).toString("base64url") }, format: "jwk" });
+    return cryptoVerify(null, Buffer.from(message), key, Buffer.from(sigB64, "base64"));
+  } catch {
+    return false;
+  }
+}
 const PK = /^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 
 export class Play {
@@ -166,6 +191,44 @@ export class Play {
     const tx = await this.chain.create(accountId, devicePk, this.cfg.starterYocto);
     this.store.set(user.sub, accountId, this.now());
     return { status: 200, body: { account: accountId, created: true, tx } };
+  }
+
+  private topped = new Map<string, number>();
+  private day = { start: 0, sent: 0n };
+
+  /** POST /play/topup {account, public_key, ts, signature}: refills a low sign-in account with free test NEAR.
+   *  The phone signs `nme-topup:<account>:<ts>` with its key; that key must be on the account. Once per 12 h per account,
+   *  only under 0.6 NEAR, up to 1 NEAR, 10 NEAR a day across everyone. */
+  async topup(raw: unknown, verify: (pk: string, msg: string, sig: string) => boolean = ed25519Ok): Promise<{ status: number; body: unknown }> {
+    const o = (raw ?? {}) as Record<string, unknown>;
+    const account = typeof o.account === "string" ? o.account : "";
+    const pk = typeof o.public_key === "string" ? o.public_key : "";
+    const ts = typeof o.ts === "number" ? o.ts : 0;
+    const sig = typeof o.signature === "string" ? o.signature : "";
+    const name = account.endsWith(`.${this.cfg.parent}`) ? account.slice(0, -this.cfg.parent.length - 1) : "";
+    if (!NAME.test(name)) throw new BadRequest("only Google sign-in accounts get free test NEAR");
+    if (!PK.test(pk)) throw new BadRequest("public_key must be an ed25519 public key");
+    const t = this.now();
+    if (Math.abs(t - ts) > TOPUP.maxAgeMs) throw new BadRequest("the request is too old, try again");
+    if (!verify(pk, topupMessage(account, ts), sig)) throw new BadRequest("signature does not match", 401);
+    if (!(await this.chain.hasKey(account, pk))) throw new BadRequest("that key is not on this account", 401);
+    const last = this.topped.get(account) ?? 0;
+    if (t - last < TOPUP.everyMs) throw new BadRequest(`you got free NEAR recently; try again in ${Math.ceil((TOPUP.everyMs - (t - last)) / 3_600_000)} h`, 429);
+    const bal = await this.chain.balance(account);
+    if (bal >= TOPUP.below) throw new BadRequest("you still have enough NEAR to play", 409);
+    if (t - this.day.start > 86_400_000) this.day = { start: t, sent: 0n };
+    const amount = TOPUP.to - bal;
+    if (this.day.sent + amount > TOPUP.perDay) throw new BadRequest("today's free NEAR is all given out, come back tomorrow", 429);
+    this.topped.set(account, t);
+    this.day.sent += amount;
+    try {
+      const tx = await this.chain.send(account, amount);
+      return { status: 200, body: { account, sent: amount.toString(), tx } };
+    } catch (e) {
+      this.topped.delete(account);
+      this.day.sent -= amount;
+      throw e;
+    }
   }
 
   private rate(ip: string) {

@@ -20,6 +20,8 @@ export const yocto = (n: number) => {
 };
 const STORAGE_DEPOSIT = "1250000000000000000000"; // 0.00125 NEAR, NEP-145 registration on the coin
 const MIN_HIT_NEAR = 0.25; // arena MIN_SCORED_BUY
+/** hire: ~6 TGas itself + 100 for OutLayer's request_execution + 40 for the result callback (it burns ~24 in total). */
+export const HIRE_TGAS = 170;
 const X_KEY = "nme.xwallet";
 
 type Toast = { tone: "ok" | "err" | "info"; text: string; href?: string };
@@ -81,6 +83,12 @@ function txHash(outcome: unknown): string | undefined {
 export function errText(e: unknown) {
   const m = (e as Error)?.message ?? String(e);
   if (/reject|cancel|denied|closed|user rejected/i.test(m)) return "You closed the wallet. Nothing was sent.";
+  // NEAR checks the price plus the whole gas reserve before running; most of the reserve comes back afterwards.
+  const nb = /Not enough balance for (\S+) \(balance: (\d+), cost: (\d+)\)/.exec(m);
+  if (nb) {
+    const n = (y: string) => (Number(BigInt(y) / 10n ** 20n) / 10_000).toFixed(2);
+    return `Not enough NEAR: this needs ${n(nb[3])} NEAR available (the price plus a network fee reserve that mostly comes back) and ${nb[1]} has ${n(nb[2])}. Top up and try again.`;
+  }
   return m.length > 240 ? m.slice(0, 240) + "…" : m;
 }
 

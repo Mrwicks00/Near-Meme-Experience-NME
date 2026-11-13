@@ -144,3 +144,21 @@ export async function quickCashOut(wallet: string, tokens: string[], onStep?: (t
   await sendFrom(me, me, [actions.deleteAccount(wallet)]);
   if (read()?.account === me) write({ account: null, sk: deviceKey().sk });
 }
+
+/** Free test NEAR for a low Google sign-in account: the phone signs a dated request with its own key (no popup). */
+export async function playTopup(): Promise<{ sent?: string; error?: string }> {
+  const s = read();
+  if (!s?.account) return { error: "not signed in" };
+  const kp = KeyPair.fromString(s.sk as KeyPairString);
+  const ts = Date.now();
+  const sig = kp.sign(new TextEncoder().encode(`nme-topup:${s.account}:${ts}`)).signature;
+  const r = await fetch(`${NME.relayerUrl}/play/topup`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ account: s.account, public_key: kp.getPublicKey().toString(), ts, signature: btoa(String.fromCharCode(...sig)) }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const j = (await r.json().catch(() => ({}))) as { sent?: string; error?: string };
+  if (!r.ok) return { error: j.error ?? `HTTP ${r.status}` };
+  return j;
+}

@@ -8,7 +8,7 @@ import { claimDeposit, depositAddress, sendEth, sendSol, walletName, walletState
 import { CoinIcon } from "./CoinIcon";
 import { matchCoin } from "@/lib/match";
 import { useCoins } from "@/lib/hooks";
-import { errText, useActions } from "./Actions";
+import { HIRE_TGAS, errText, useActions } from "./Actions";
 
 type Asset = "NEAR" | "SOL" | "ETH";
 type Intent =
@@ -157,7 +157,7 @@ export function TradeBox({ defaultTicker, compactLayout = false, known }: { defa
         const price = extra.price ?? (await loadJobPrice(coin.key));
         setBusy("Sign in your wallet…");
         await act({
-          near: { contractId: NME.arena, method: "hire", args: { ticker: coin.key, kind: intent.kind, target: intent.target, prompt: intent.prompt }, tgas: 300, deposit: price },
+          near: { contractId: NME.arena, method: "hire", args: { ticker: coin.key, kind: intent.kind, target: intent.target, prompt: intent.prompt }, tgas: HIRE_TGAS, deposit: price },
           x: { Hire: { ticker: coin.key, kind: intent.kind, target: intent.target, prompt: intent.prompt, amount: price } },
           ok: `Hired $${t} for a ${intent.kind}. The answer shows up on its page.`,
         });

@@ -3,7 +3,7 @@
 // player's NEAR account for this device's key. New players pick a name once.
 import { useEffect, useRef, useState } from "react";
 import { NME } from "@/lib/config";
-import { isQuick, playBalance, playSecret, playSession } from "@/lib/play";
+import { isQuick, playBalance, playSecret, playSession, playTopup } from "@/lib/play";
 import { compact, near } from "@/lib/format";
 import { useActions } from "./Actions";
 
@@ -113,6 +113,20 @@ export function GoogleSignIn({ onDone }: { onDone?: () => void }) {
           </div>
           <button className="chip bg-paper" onClick={() => { if (confirm("Sign out on this device? Back up your key first if you want to use it elsewhere.")) disconnect("play"); }}>Sign out</button>
         </div>
+        {bal !== null && near(bal) < 0.6 && (
+          <div className="rounded-xl border border-ink bg-mint p-3 text-sm">
+            <p>Running low. Every action needs a little NEAR held for network fees (most of it comes back).</p>
+            <button className="btn mt-2 bg-night text-cream" disabled={busy} onClick={async () => {
+              setBusy(true); setErr("");
+              try {
+                const r = await playTopup();
+                if (r.error) setErr(r.error);
+                else { toast({ tone: "ok", text: `Added ${compact(near(r.sent ?? "0"))} free test NEAR.` }); setTimeout(() => playBalance(play).then(setBal), 2500); }
+              } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+            }}>{busy ? "Sending…" : "Get free test NEAR"}</button>
+            {err && <p className="mt-2 text-red">{err}</p>}
+          </div>
+        )}
         <button className="text-sm underline" onClick={() => setShowKey((v) => !v)}>{showKey ? "Hide my key" : "Back up my key"}</button>
         {showKey && (
           <div className="rounded-xl border border-ink bg-paper p-3 text-xs">

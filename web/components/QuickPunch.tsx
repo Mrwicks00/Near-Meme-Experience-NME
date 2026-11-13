@@ -7,12 +7,12 @@
 import { useEffect, useState } from "react";
 import { useCoins } from "@/lib/hooks";
 import { compact, near } from "@/lib/format";
-import { isQuick, playBalance } from "@/lib/play";
+import { isQuick, playBalance, playTopup } from "@/lib/play";
 import { PUNCH_EVENT, useActions } from "./Actions";
 import { GoogleSignIn } from "./GoogleSignIn";
 
 export function QuickPunch({ dark }: { dark?: boolean }) {
-  const { play, nearWallet, x, quickLoad, cashOut } = useActions();
+  const { play, nearWallet, x, quickLoad, cashOut, toast } = useActions();
   const coins = useCoins();
   const [bal, setBal] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,7 +34,17 @@ export function QuickPunch({ dark }: { dark?: boolean }) {
   const run = async (f: () => Promise<unknown>) => { setBusy(true); try { await f(); } finally { setBusy(false); } };
 
   if (play && !quick) {
-    return dark ? <p className="text-center text-sm text-cream/80">⚡ One-tap punches on, signed on this device as {play}{bal !== null ? ` · ${compact(bal)} NEAR` : ""}</p> : null;
+    if (!dark) return null;
+    const low = bal !== null && bal < 0.6; // a punch needs ~0.55 NEAR available (0.25 + the gas reserve)
+    return (
+      <div className="flex flex-wrap items-center justify-center gap-2 text-center text-sm text-cream/80">
+        <span>⚡ One-tap punches on, signed on this device as {play}{bal !== null ? ` · ${compact(bal)} NEAR` : ""}</span>
+        {low && <button className={chip} disabled={busy} onClick={() => run(async () => {
+          const r = await playTopup();
+          toast(r.error ? { tone: "err", text: r.error } : { tone: "ok", text: `Added ${compact(near(r.sent ?? "0"))} free test NEAR.` });
+        })}>{busy ? "Sending…" : "Low on NEAR · get free test NEAR"}</button>}
+      </div>
+    );
   }
 
   if (quick) {

@@ -59,6 +59,10 @@ export function makeServer(relayer: Relayer, opts: { corsOrigin: string; trustPr
           if (!play) return send({ status: 503, body: { error: "Google sign-in is not enabled on this relayer" } });
           return send(await play.session(body, ip));
         }
+        if (url.pathname === "/play/topup") {
+          if (!play) return send({ status: 503, body: { error: "Google sign-in is not enabled on this relayer" } });
+          return send(await play.topup(body));
+        }
         if (url.pathname === "/action") return send(await relayer.action(body, ip));
         if (url.pathname === "/claim") return send(await relayer.claim(body, ip));
         if (url.pathname === "/claim_deposit") return send(await relayer.claimDeposit(body, ip));

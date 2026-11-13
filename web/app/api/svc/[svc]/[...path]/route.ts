@@ -2,7 +2,7 @@
 // (CORS, extensions and Chrome's local-network rules can block those). Only the known routes are forwarded.
 const TARGETS: Record<string, { base: string; routes: RegExp }> = {
   intent: { base: process.env.INTENT_URL || "http://localhost:8788", routes: /^(launch\/(parse|icon|preview)|trade\/parse|health|proof\/[A-Za-z0-9_-]{8,80})$/ },
-  relayer: { base: process.env.RELAYER_URL || "http://localhost:8787", routes: /^(health|config|message|action|claim|claim_deposit|execute_claim|play\/session|wallet\/[A-Za-z0-9:]{10,80})$/ },
+  relayer: { base: process.env.RELAYER_URL || "http://localhost:8787", routes: /^(health|config|message|action|claim|claim_deposit|execute_claim|play\/(session|topup)|wallet\/[A-Za-z0-9:]{10,80})$/ },
 };
 
 async function forward(req: Request, ctx: { params: Promise<{ svc: string; path: string[] }> }) {

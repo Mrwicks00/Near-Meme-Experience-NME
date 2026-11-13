@@ -12,7 +12,7 @@ import {
 } from "@/lib/nme";
 import { CoinIcon, useIconTint } from "../CoinIcon";
 import { TONE_BG } from "../Times";
-import { useActions, yocto } from "../Actions";
+import { HIRE_TGAS, useActions, yocto } from "../Actions";
 import { crownOwnerOf, walletTokens } from "@/lib/xwallet";
 import { TradeBox } from "../TradeBox";
 import { Raid } from "./Raid";
@@ -157,7 +157,7 @@ export function Hire({ coin, deliveries }: { coin: Coin; deliveries: Delivery[] 
         <strong className="num">You pay {price ? `${compact(p)} NEAR` : "…"}.</strong> When the job is delivered, about {compact(p * 0.9)} NEAR buys ${coin.ticker} and burns it. If it isn&apos;t delivered before the deadline, you can take your money back.
       </div>
       <button className="btn mt-4 w-full bg-night text-cream" disabled={!ok}
-        onClick={() => act({ near: { contractId: NME.arena, method: "hire", args: { ticker: coin.key, kind, target: sentTarget, prompt }, tgas: 300, deposit: price! }, x: { Hire: { ticker: coin.key, kind, target: sentTarget, prompt, amount: price! } }, ok: `Hired $${coin.ticker} for a ${kind}. The answer lands in the deliveries below.` }).then((d) => d && setPrompt(""))}>
+        onClick={() => act({ near: { contractId: NME.arena, method: "hire", args: { ticker: coin.key, kind, target: sentTarget, prompt }, tgas: HIRE_TGAS, deposit: price! }, x: { Hire: { ticker: coin.key, kind, target: sentTarget, prompt, amount: price! } }, ok: `Hired $${coin.ticker} for a ${kind}. The answer lands in the deliveries below.` }).then((d) => d && setPrompt(""))}>
         Hire for {price ? `${compact(p)} NEAR` : "…"}
       </button>
 
