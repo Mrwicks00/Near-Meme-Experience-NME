@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { Actions, WalletButton } from "./Actions";
 import { Nav } from "./Nav";
 import { Footer } from "./Footer";
+import { WhereNext } from "./WhereNext";
 
 /** Nav and footer everywhere except the embeddable widget (/widget/*), which is just the card. */
 function Chrome({ children }: { children: React.ReactNode }) {
@@ -13,6 +14,7 @@ function Chrome({ children }: { children: React.ReactNode }) {
     <>
       <Nav right={<WalletButton />} />
       {children}
+      <WhereNext />
       <Footer />
     </>
   );

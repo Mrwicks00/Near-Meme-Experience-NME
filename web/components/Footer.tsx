@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { NME } from "@/lib/config";
+import { DESTINATIONS } from "./Nav";
 
 export function Footer() {
   return (
@@ -17,8 +19,13 @@ export function Footer() {
           </ul>
         </div>
         <div>
-          <p className="font-semibold uppercase tracking-wide">Credits</p>
-          <p className="mt-3 text-cream/80">Photos: Wikimedia Commons (public domain, CC0, CC BY, CC BY-SA). Full list in <code>web/public/img/CREDITS.md</code>.</p>
+          <p className="font-semibold uppercase tracking-wide">Explore</p>
+          <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-cream/80">
+            <li><Link className="underline-offset-4 hover:underline" href="/">Home</Link></li>
+            {DESTINATIONS.map((d) => (
+              <li key={d.href}><Link className="underline-offset-4 hover:underline" href={d.href}>{d.label}</Link></li>
+            ))}
+          </ul>
         </div>
       </div>
       <div className="flex justify-center px-4 pb-6">

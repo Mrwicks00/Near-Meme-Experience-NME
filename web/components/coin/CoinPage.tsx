@@ -136,7 +136,7 @@ export function Hire({ coin, deliveries }: { coin: Coin; deliveries: Delivery[] 
     meme: { about: `${T} draws a meme picture with a short caption. Takes about a minute.`, ask: "What should the picture show?", eg: "a frog in sunglasses laughing at a crying dog" },
   };
   return (
-    <Panel tone="bg-lilac-deep" kicker="work" title={`Hire $${coin.ticker}'s brain`} ai>
+    <Panel id="hire" tone="bg-lilac-deep" kicker="work" title={`Hire $${coin.ticker}'s brain`} ai>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Job">
         {JOB_KINDS.map((k) => (
           <button key={k} role="radio" aria-checked={kind === k} onClick={() => setKind(k)} className={`chip px-3 py-1.5 text-[0.8rem] ${kind === k ? "bg-night text-cream" : "bg-paper"}`}>{k}</button>
@@ -338,6 +338,11 @@ export function CoinPage({ coinKey }: { coinKey: string }) {
 
   return (
     <main>
+      <nav aria-label="Back" className="flex flex-wrap items-center gap-2 px-4 py-3 text-sm font-semibold sm:px-8">
+        <Link href="/#memes" className="chip bg-paper-2 px-3 py-1.5">← All memes</Link>
+        <Link href="/colosseum" className="chip bg-paper-2 px-3 py-1.5">⚔️ Colosseum</Link>
+        {coin.native && <a href="#hire" className="chip bg-paper-2 px-3 py-1.5">🧠 Hire its brain</a>}
+      </nav>
       <section className="border-y border-ink" style={{ background: tint }}>
         <div className="flex flex-col gap-8 px-4 py-10 sm:px-8 md:flex-row md:items-center md:py-14">
           <div className="-rotate-2 self-start rounded-[2rem] border border-ink bg-paper p-3 shadow-[0_18px_40px_-22px_var(--color-drop)]">

@@ -1,5 +1,7 @@
 "use client";
 import { useMemo } from "react";
+import Link from "next/link";
+import { DESTINATIONS } from "@/components/Nav";
 import { FightPoster } from "@/components/FightPoster";
 import { Times } from "@/components/Times";
 import { Verbs } from "@/components/Verbs";
@@ -43,6 +45,14 @@ function Home() {
           <p className="max-w-[34ch] text-[clamp(1.6rem,3.2vw,2.7rem)] font-medium leading-[1.12] tracking-[-0.015em]">
             NME is a memecoin arena on NEAR. Memes fight, think, work and defend their own price. Buying and selling are always free: no tax, no pause, no admin key.
           </p>
+          {/* New here? One tap to anywhere. */}
+          <nav aria-label="Start here" className="mt-8 flex flex-wrap gap-2.5">
+            {DESTINATIONS.map((d, i) => (
+              <Link key={d.href} href={d.href} className={`btn px-4 py-2.5 text-[0.95rem] ${i === 0 ? "bg-mint text-ink" : "bg-paper-2"}`}>
+                <span aria-hidden>{d.icon}</span> {d.label}
+              </Link>
+            ))}
+          </nav>
         </section>
         <section id="say" aria-labelledby="say-h" className="border-y border-ink bg-mint-deep px-4 py-12 sm:px-8 sm:py-16">
           <p className="font-hand text-[2.4rem] leading-none">just say it</p>

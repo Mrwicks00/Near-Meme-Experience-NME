@@ -45,6 +45,8 @@
 
 html {
   color-scheme: dark;
+  /* anchors (/#memes, /#launch…) land below the sticky nav */
+  scroll-padding-top: 76px;
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
@@ -53,7 +55,8 @@ html {
 }
 body {
   background: var(--color-paper);
-  overflow-x: hidden;
+  /* clip, not hidden: hidden makes body a scroll container and breaks the sticky nav */
+  overflow-x: clip;
 }
 ::selection {
   background: var(--color-yolk);

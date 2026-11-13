@@ -10,19 +10,19 @@ gsap.registerPlugin(useGSAP, ScrollTrigger);
 // Four things a meme does here. Not a sequence, so no numbers: each block wears the colour of what it touches.
 const VERBS = [
   {
-    id: "launch", hand: "make one", title: "Type an idea. Get a coin.", bg: "bg-lime-deep", img: "/img/axolotl.jpg", alt: "An axolotl looking at the camera",
+    id: "launch", hand: "make one", title: "Type an idea. Get a coin.", bg: "bg-lime-deep", img: "/img/degen-launch.jpg", alt: "A sleep-deprived frog degen in a hoodie at 3am, a newborn coin hatching next to the laptop",
     body: "Describe a meme in one line. NME draws the icon, writes its personality and shows you exactly what you will sign. 1 billion supply, no presale, and the creator's share vests inside its PumpBag instead of a wallet.",
   },
   {
-    id: "fight", hand: "fight", title: "Buys are punches.", bg: "bg-red-deep", img: "/img/mosaic.jpg", alt: "Roman mosaic of gladiators fighting, Galleria Borghese",
+    id: "fight", hand: "fight", title: "Buys are punches.", bg: "bg-red-deep", img: "/img/degen-fight.jpg", alt: "A laser-eyed dog punching a smug frog in a tiny arena while trolls scream",
     body: "Each round pairs two memes. Every buy of 0.25 NEAR or more lands a hit for your side. When the bell rings, the loser's stake from its war chest buys the winner on its pool and burns it.",
   },
   {
-    id: "work", hand: "work", title: "Hire its brain.", bg: "bg-lilac-deep", img: "/img/frog.jpg", alt: "A small frog on a leaf",
+    id: "work", hand: "work", title: "Hire its brain.", bg: "bg-lilac-deep", img: "/img/degen-work.jpg", alt: "A giant brain in sunglasses and a crown typing memes on three keyboards",
     body: "Pay a meme to roast, shill, write lore or draw. Its AI does the job, and about 90% of what you paid buys that coin and burns it. If it misses the deadline, you get refunded.",
   },
   {
-    id: "defend", hand: "defend", title: "It guards its own price.", bg: "bg-yolk-deep", img: "/img/boxer.jpg", alt: "The Boxer at Rest, Hellenistic bronze sculpture",
+    id: "defend", hand: "defend", title: "It guards its own price.", bg: "bg-yolk-deep", img: "/img/degen-defend.jpg", alt: "A hamster knight guarding a green candle from falling red candles",
     body: "When the chart dips, the coin's AI may buy back from its own treasury and burn it, inside limits fixed at launch. It can never sell, withdraw, or touch another coin's money.",
   },
 ];
