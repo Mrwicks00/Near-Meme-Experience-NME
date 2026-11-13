@@ -6,6 +6,8 @@ import { Coin, loadBalance, loadCoin, loadJobPrice, quoteSell } from "@/lib/nme"
 import { minOutOf, quoteBuy, yoctoOf } from "@/lib/quote";
 import { claimDeposit, depositAddress, sendEth, sendSol, walletName, walletState, walletTokens } from "@/lib/xwallet";
 import { CoinIcon } from "./CoinIcon";
+import { matchCoin } from "@/lib/match";
+import { useCoins } from "@/lib/hooks";
 import { errText, useActions } from "./Actions";
 
 type Asset = "NEAR" | "SOL" | "ETH";
@@ -31,10 +33,10 @@ export function withTicker(t: string, tk?: string): string {
   return `${s} $${tk}`;
 }
 
-async function parse(text: string): Promise<{ intent?: Intent; ask?: string; source?: string }> {
+async function parse(text: string, roster: Coin[]): Promise<{ intent?: Intent; ask?: string; source?: string }> {
   let r: Response;
   try {
-    r = await fetch(`${NME.intentUrl}/trade/parse`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }), signal: AbortSignal.timeout(45000) });
+    r = await fetch(`${NME.intentUrl}/trade/parse`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, coins: roster.map((c) => ({ ticker: c.key.includes(".") ? c.ticker.toLowerCase() : c.key, name: c.name })) }), signal: AbortSignal.timeout(45000) });
   } catch {
     throw new Error("The parser didn't answer. Try again in a moment.");
   }
@@ -53,20 +55,25 @@ export function TradeBox({ defaultTicker, compactLayout = false, known }: { defa
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [ask, setAsk] = useState<string | null>(null);
+  const [choices, setChoices] = useState<{ intent: Intent; coins: Coin[] } | null>(null);
+  const roster = useCoins();
   const [intent, setIntent] = useState<Intent | null>(null);
   const [coin, setCoin] = useState<Coin | null>(null);
   const [extra, setExtra] = useState<{ out?: string | null; price?: string; balance?: string | null }>({});
 
   async function go(t: string) {
     if (!t.trim()) return;
-    setAsk(null); setIntent(null); setCoin(null); setExtra({});
+    setAsk(null); setIntent(null); setCoin(null); setExtra({}); setChoices(null);
     setBusy("Reading that…");
     try {
-      const p = await parse(withTicker(t, defaultTicker));
+      const list = known?.length ? known : roster.data ?? [];
+      const p = await parse(withTicker(t, defaultTicker), list);
       if (!p.intent) { setAsk(p.ask ?? "Say it another way?"); return; }
-      // Use the roster this page already loaded; only fetch when the coin isn't in it.
-      const c = known?.find((k) => k.key === p.intent!.ticker || k.ticker.toLowerCase() === p.intent!.ticker) ?? (await loadCoin(p.intent.ticker).catch(() => null));
-      if (!c) { setAsk(`There's no $${p.intent.ticker.toUpperCase()} in the arena. Check the roster for the exact ticker.`); return; }
+      // Forgiving match on the roster: short names, words of the name, small typos. Two equally close coins: ask.
+      const m = matchCoin(p.intent.ticker, list);
+      if (m && "choices" in m) { setChoices({ intent: p.intent, coins: m.choices }); setAsk(`Which coin did you mean by "${p.intent.ticker}"?`); return; }
+      const c = m?.coin ?? (await loadCoin(p.intent.ticker).catch(() => null));
+      if (!c) { setAsk(`I can't find a coin like "${p.intent.ticker}" in the arena. Try its ticker or a word of its name.`); return; }
       setIntent(p.intent); setCoin(c);
     } catch (e) {
       setAsk((e as Error).message);
@@ -205,7 +212,20 @@ export function TradeBox({ defaultTicker, compactLayout = false, known }: { defa
 
       <div aria-live="polite">
         {busy && <p className="rounded-2xl border border-ink bg-paper-2 p-4 font-hand text-2xl">{busy}</p>}
-        {!busy && ask && <p className="rounded-2xl border border-ink bg-paper-2 p-4"><strong>Quick question:</strong> {ask}</p>}
+        {!busy && ask && (
+          <div className="rounded-2xl border border-ink bg-paper-2 p-4">
+            <p><strong>Quick question:</strong> {ask}</p>
+            {choices && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {choices.coins.map((c) => (
+                  <button key={c.key} className="chip bg-paper hover:bg-mint" onClick={() => { setIntent(choices.intent); setCoin(c); setChoices(null); setAsk(null); }}>
+                    <CoinIcon src={c.icon} ticker={c.ticker} size={20} className="rounded-md" /> ${c.ticker} <span className="font-normal text-ink-2">{c.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {!busy && intent && coin && (
           <div className="rounded-[1.6rem] border border-ink bg-paper-2 p-5 shadow-[0_18px_40px_-22px_var(--color-drop)]">
             <div className="flex items-center gap-3">

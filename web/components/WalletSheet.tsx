@@ -175,10 +175,11 @@ export function WalletSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="nme-overlay fixed inset-0 z-50 grid place-items-end bg-night/75 sm:place-items-center sm:p-6" onClick={onClose}>
-      <div role="dialog" aria-modal aria-label="Wallets" onClick={(e) => e.stopPropagation()} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] border border-ink bg-paper p-6 shadow-[0_18px_40px_-22px_var(--color-drop)] sm:rounded-[2rem]">
-        <div className="flex items-start justify-between gap-4">
+      <div role="dialog" aria-modal aria-label="Wallets" onClick={(e) => e.stopPropagation()} className="max-h-[85dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[2rem] border border-ink bg-paper px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-[0_18px_40px_-22px_var(--color-drop)] sm:max-h-[92dvh] sm:rounded-[2rem]">
+        {/* Sticky header: on phones the sheet scrolls, and Close must stay in reach. */}
+        <div className="sticky top-0 z-10 -mx-6 flex items-center justify-between gap-4 border-b border-ink/15 bg-paper px-6 pb-3 pt-5">
           <h2 className="font-display text-4xl leading-none">wallets</h2>
-          <button className="chip bg-paper" onClick={onClose}>Close</button>
+          <button aria-label="Close" className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-ink bg-paper text-2xl leading-none hover:bg-mint" onClick={onClose}>✕</button>
         </div>
 
         {NME.googleClientId && (

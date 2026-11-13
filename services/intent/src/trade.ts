@@ -20,7 +20,7 @@ const ASSETS: Record<string, Asset> = { near: "NEAR", "Ⓝ": "NEAR", n: "NEAR", 
 const KINDS: Record<string, JobKind> = { roast: "roast", diss: "roast", shill: "shill", promote: "shill", lore: "lore", story: "lore", meme: "meme", draw: "meme", picture: "meme" };
 
 const clean = (t: string) => t.replace(/[\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim();
-const tick = (t: string) => t.replace(/^\$/, "").toLowerCase();
+const tick = (t: string) => t.trim().replace(/^\$/, "").replace(/\s+/g, "").toLowerCase();
 
 function amount(s: string): string | null {
   if (!/^\d+(\.\d{1,18})?$/.test(s)) return null;
@@ -100,10 +100,23 @@ Reply with ONE JSON object and nothing else, one of:
 {"action":"sell","ticker":"pepe","amount":"100" or "all"}
 {"action":"fund_chest","ticker":"pepe","amount":"1","asset":"NEAR|SOL|ETH"}
 {"action":"hire","ticker":"pepe","kind":"roast|shill|lore|meme","target":"who or what, may be empty","prompt":"what to write or draw"}
-"ape", "long", "bag" mean buy. If anything needed is missing or the message is not a trade, reply {"ask":"one short question"}.`;
+"ape", "long", "bag" mean buy. If anything needed is missing or the message is not a trade, reply {"ask":"one short question"}.
+When a list of coins is given, "ticker" must be the ticker of the coin the user means: match short names, nicknames, words of the name and misspellings to that list. If no coin in the list is close, use the user's word as written.`;
+
+/** Optional roster from the app (data, untrusted): up to 100 "ticker: name" lines, cleaned. */
+function rosterText(coins: unknown): string {
+  if (!Array.isArray(coins)) return "";
+  const lines = coins.slice(0, 100).map((c) => {
+    const o = (c ?? {}) as Record<string, unknown>;
+    const t = String(o.ticker ?? "").toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 64);
+    const n = String(o.name ?? "").replace(/[^\p{L}\p{N} ._-]/gu, "").slice(0, 64);
+    return t ? `${t}: ${n}` : "";
+  }).filter(Boolean);
+  return lines.length ? `\n<coins>\n${lines.join("\n")}\n</coins>` : "";
+}
 
 /** Grammar first; model only for other phrasings. Never executes. */
-export async function parseTrade(text: unknown, llm: Llm | null): Promise<TradeResult> {
+export async function parseTrade(text: unknown, llm: Llm | null, coins?: unknown): Promise<TradeResult> {
   const t = typeof text === "string" ? clean(text) : "";
   if (!t) return { ask: "Tell me what to do, for example: ape $PEPE with 1 SOL." };
   if (t.length > MAX_TEXT) return { ask: `Keep it under ${MAX_TEXT} characters.` };
@@ -116,7 +129,7 @@ export async function parseTrade(text: unknown, llm: Llm | null): Promise<TradeR
   if (!llm) return { ask: "Try a shape like: ape $PEPE with 1 SOL, sell all my $PEPE, fund $PEPE chest with 1 NEAR, hire $PEPE to roast DOGE." };
   let out: string;
   try {
-    out = await llm.complete(TRADE_SYSTEM, `<message>${t.replace(/<\/?message>/gi, "")}</message>`);
+    out = await llm.complete(TRADE_SYSTEM, `<message>${t.replace(/<\/?(message|coins)>/gi, "")}</message>${rosterText(coins)}`);
   } catch {
     return { ask: "The AI parser isn't answering. Try a shape like: ape $PEPE with 1 SOL." };
   }

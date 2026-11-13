@@ -73,7 +73,7 @@ export function makeServer(d: Deps, now: () => number = Date.now): Server {
       if (!allow(fwd || req.socket.remoteAddress || "?")) return send(429, { error: "too many requests, wait a minute" });
       const b = await readBody(req);
       if (url === "/launch/parse") return send(200, await parseLaunch(b?.text, d.llm));
-      if (url === "/trade/parse") return send(200, await parseTrade(b?.text, d.llm));
+      if (url === "/trade/parse") return send(200, await parseTrade(b?.text, d.llm, b?.coins));
       if (url === "/launch/icon") {
         if (typeof b?.prompt !== "string" || !b.prompt.trim() || b.prompt.length > 300) throw new DraftError("prompt must be 1 to 300 characters");
         return send(200, { icon_data_url: await d.icon(b.prompt.trim()) });
