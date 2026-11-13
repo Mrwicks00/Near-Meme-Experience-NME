@@ -7,7 +7,8 @@ import { useArena, useCoins, useCommentary, useFeed, useNow } from "@/lib/hooks"
 import { ago, clock, compact, near } from "@/lib/format";
 import { describe, displayTicker, prettyText } from "@/lib/nme";
 import { FightPoster, phaseOf } from "../FightPoster";
-import { useActions } from "../Actions";
+import { PUNCH_EVENT, type PunchDetail, useActions } from "../Actions";
+import { QuickPunch } from "../QuickPunch";
 import { TONE_BG } from "../Times";
 import type { Bubble, Hit, Outcome } from "./Arena3D";
 
@@ -33,7 +34,7 @@ export function ColosseumPage() {
   const feed = useFeed(100);
   const commentary = useCommentary();
   const now = useNow(1000);
-  const { buy, poke } = useActions();
+  const { punch, poke, play } = useActions();
   const [mode, setMode] = useState<"3d" | "2d" | null>(null);
   const [hits, setHits] = useState<(Hit & { at: number })[]>([]);
 
@@ -51,10 +52,28 @@ export function ColosseumPage() {
   const keyA = replaying ? replay!.a : phase ? (phase.kind === "next" ? phase.a?.key : phase.pair.a) : undefined;
   const keyB = replaying ? replay!.b : phase ? (phase.kind === "next" ? phase.b?.key : phase.pair.b) : undefined;
   const practice = !phase || phase.kind !== "live";
+  // Punches only while the clock runs: once the bell rings, the fight buttons lock until the next round opens.
+  const fighting = !!phase && phase.kind === "live" && phase.endsMs > (now ?? 0) && !replaying;
   const A = list.find((c) => c.key === keyA);
   const B = list.find((c) => c.key === keyB);
   const tA = A?.ticker ?? (keyA ? displayTicker(keyA) : "?");
   const tB = B?.ticker ?? (keyB ? displayTicker(keyB) : "?");
+
+  // Your own punch lands the moment you tap (or your wallet confirms); its feed entry a few seconds later is then skipped.
+  const mine = useRef<{ side: "a" | "b"; at: number }[]>([]);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<PunchDetail>).detail;
+      if (!fighting || (d.key !== keyA && d.key !== keyB)) return;
+      const side: "a" | "b" = d.key === keyA ? "a" : "b";
+      const at = Date.now();
+      mine.current = [...mine.current.filter((m) => at - m.at < 60000), { side, at }];
+      setHits((h) => [...h, { id: -at - Math.random(), side, label: `+${compact(d.amountNear)} Ⓝ`, at }]);
+      setTimeout(() => setHits((h) => h.filter((x) => Date.now() - x.at < 1600)), 1700);
+    };
+    window.addEventListener(PUNCH_EVENT, on);
+    return () => window.removeEventListener(PUNCH_EVENT, on);
+  }, [fighting, keyA, keyB]);
 
   // Every fresh buy of a fighter is a hit for its side. Pops fade after 1.6 s.
   const seen = useRef(new Set<number>());
@@ -62,7 +81,15 @@ export function ColosseumPage() {
     const fresh = feed.items.filter((f) => feed.fresh.has(f.id) && !seen.current.has(f.id) && f.kind === "trade" && f.extra === "buy" && (f.ticker === keyA || f.ticker === keyB));
     if (!fresh.length) return;
     fresh.forEach((f) => seen.current.add(f.id));
-    const t0 = setTimeout(() => setHits((h) => [...h, ...fresh.map((f) => ({ id: f.id, side: (f.ticker === keyA ? "a" : "b") as "a" | "b", label: `+${compact(near(f.amount))} Ⓝ`, at: Date.now() }))]), 0);
+    const others = fresh.filter((f) => {
+      const side = f.ticker === keyA ? "a" : "b";
+      const i = mine.current.findIndex((m) => m.side === side && Date.now() - m.at < 60000);
+      if (i < 0) return true;
+      mine.current = mine.current.filter((_, j) => j !== i); // already thrown when you tapped
+      return false;
+    });
+    if (!others.length) return;
+    const t0 = setTimeout(() => setHits((h) => [...h, ...others.map((f) => ({ id: f.id, side: (f.ticker === keyA ? "a" : "b") as "a" | "b", label: `+${compact(near(f.amount))} Ⓝ`, at: Date.now() }))]), 0);
     const t1 = setTimeout(() => setHits((h) => h.filter((x) => Date.now() - x.at < 1600)), 1700);
     return () => { clearTimeout(t0); clearTimeout(t1); };
   }, [feed.items, feed.fresh, keyA, keyB]);
@@ -155,14 +182,15 @@ export function ColosseumPage() {
           )}
 
           <div className="flex flex-col items-center justify-between gap-3 border-t border-ink bg-night px-4 py-4 text-cream sm:flex-row sm:px-8">
-            <button className="btn bg-mint text-ink" disabled={!A} onClick={() => A && buy(A)}>Buy ${tA}</button>
+            <button className="btn bg-mint text-ink disabled:opacity-40" disabled={!A || !fighting} onClick={() => A && fighting && punch(A)}>{fighting ? `${play ? "Punch" : "Buy"} $${tA}` : "Round over"}</button>
             <p className="text-center">
               {!phase ? "…" : phase.kind === "live" ? <span className="flex flex-col items-center leading-tight"><span className="font-display text-3xl tnum">{clock(phase.endsMs - now)} left in the fight</span><span className="text-sm text-cream/80">Buy 0.25 NEAR or more of either side to land a punch</span></span>
                 : phase.kind === "bell" ? <>The bell rang {ago(phase.endedMs, now)}. <button className="pointer-events-auto underline" onClick={poke}>Settle the round</button></>
                 : <>No fight on. <button className="underline" onClick={poke}>Open the next round</button></>}
             </p>
-            <button className="btn bg-mint text-ink" disabled={!B} onClick={() => B && buy(B)}>Buy ${tB}</button>
+            <button className="btn bg-mint text-ink disabled:opacity-40" disabled={!B || !fighting} onClick={() => B && fighting && punch(B)}>{fighting ? `${play ? "Punch" : "Buy"} $${tB}` : "Round over"}</button>
           </div>
+          {fighting && <div className="border-t border-cream/15 bg-night px-4 pb-4 text-cream sm:px-8"><QuickPunch dark /></div>}
         </section>
       )}
 

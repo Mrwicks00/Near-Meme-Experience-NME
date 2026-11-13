@@ -3,7 +3,7 @@
 // player's NEAR account for this device's key. New players pick a name once.
 import { useEffect, useRef, useState } from "react";
 import { NME } from "@/lib/config";
-import { playBalance, playSecret, playSession } from "@/lib/play";
+import { isQuick, playBalance, playSecret, playSession } from "@/lib/play";
 import { compact, near } from "@/lib/format";
 import { useActions } from "./Actions";
 
@@ -100,6 +100,8 @@ export function GoogleSignIn({ onDone }: { onDone?: () => void }) {
   };
 
   if (!NME.googleClientId) return null;
+
+  if (isQuick(play)) return <p className="text-sm">Your quick-punch account is open on this device. Cash it out to your wallet first, then sign in with Google.</p>;
 
   if (play) {
     return (

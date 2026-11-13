@@ -1,6 +1,7 @@
 "use client";
 import { NME } from "@/lib/config";
 import { GoogleSignIn } from "./GoogleSignIn";
+import { QuickPunch } from "./QuickPunch";
 import { useEffect, useState } from "react";
 import { compact, near } from "@/lib/format";
 import { Claim, EvmChoice, XWallet, claimDeposit, depositAddress, evmWallets, gatewayLimits, getClaim, sendEth, sendSol, solDeposits, waitEthFinal } from "@/lib/xwallet";
@@ -197,7 +198,9 @@ export function WalletSheet({ onClose }: { onClose: () => void }) {
               <p className="truncate font-semibold">{account}</p>
               <button className="chip bg-paper" onClick={() => disconnect("near")}>Disconnect</button>
             </div>
-          ) : (
+          ) : null}
+          {account && <div className="mt-3"><QuickPunch /></div>}
+          {account ? null : (
             <>
               <p className="mt-1 text-sm">Meteor, Intear, Nightly, Ledger and other wallets that support NEAR testnet.</p>
               <button className="btn mt-3 w-full bg-paper" onClick={connectNear}>Connect a NEAR wallet</button>

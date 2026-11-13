@@ -1,5 +1,5 @@
 "use client";
-import { playAccount, playCall, playSignOut } from "@/lib/play";
+import { isQuick, playAccount, playCall, playSignOut, quickAccount, quickCashOut, setPlayAccount } from "@/lib/play";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { NearProvider, useNearWallet } from "near-connect-hooks";
 import { NME } from "@/lib/config";
@@ -9,7 +9,7 @@ import type { Coin, Round } from "@/lib/nme";
 import { EvmChoice, XKind, XWallet, WalletAction, connectEvm, connectPhantom, signedAction, walletState } from "@/lib/xwallet";
 import { walletName } from "@/lib/xwallet";
 import { CoinIcon } from "./CoinIcon";
-import { quoteBuy } from "@/lib/quote";
+import { minOutOf, quoteBuy } from "@/lib/quote";
 import { WalletSheet } from "./WalletSheet";
 import { announceChange } from "@/lib/hooks";
 
@@ -38,6 +38,12 @@ type Ctx = {
   play: string | null;
   setPlay: (account: string | null) => void;
   buy: (coin: Coin, amountNear?: number) => void;
+  /** Fight button: a device account (Google or quick punch) buys the minimum hit at once, no sheet; others get the buy sheet. */
+  punch: (coin: Coin) => void;
+  /** NEAR wallet: send `amountNear` once to this device's quick-punch account. */
+  quickLoad: (amountNear: number) => Promise<boolean>;
+  /** Quick-punch account: send its coins and NEAR back to the NEAR wallet and close it. */
+  cashOut: (tokens: string[]) => Promise<boolean>;
   poke: () => void;
   toast: (t: Toast) => void;
   /** NEAR-account-only call. */
@@ -46,6 +52,20 @@ type Ctx = {
   act: (a: { near?: NearCall; x?: WalletAction; ok: string }) => Promise<boolean>;
 };
 const ActionsCtx = createContext<Ctx | null>(null);
+
+/** Fired the moment a buy is sent (device accounts) or confirmed (wallets), so the arena can throw the punch at once. */
+export const PUNCH_EVENT = "nme:punch";
+export type PunchDetail = { key: string; amountNear: number };
+function announcePunch(key: string, amountNear: number) {
+  if (amountNear >= MIN_HIT_NEAR) window.dispatchEvent(new CustomEvent<PunchDetail>(PUNCH_EVENT, { detail: { key, amountNear } }));
+}
+
+/** A buy signed on this device: register on the coin if needed, then buy. Returns the transaction hash. */
+async function deviceBuy(account: string, coin: Coin, amountNear: number, minOut: string): Promise<string> {
+  const reg = await view<unknown>(coin.account, "storage_balance_of", { account_id: account }).catch(() => null);
+  if (!reg) await playCall({ contractId: coin.account, method: "storage_deposit", args: { account_id: account, registration_only: true }, tgas: 30, deposit: STORAGE_DEPOSIT });
+  return playCall({ contractId: NME.arena, method: "buy", args: { key: coin.key, min_out: minOut }, tgas: 300, deposit: yocto(amountNear) });
+}
 
 export function useActions() {
   const c = useContext(ActionsCtx);
@@ -79,7 +99,7 @@ function saveX(x: XWallet | null) {
 }
 
 function Inner({ children }: { children: React.ReactNode }) {
-  const { signedAccountId, signIn, signOut, callFunction, signAndSendTransactions } = useNearWallet();
+  const { signedAccountId, signIn, signOut, callFunction, signAndSendTransaction, signAndSendTransactions } = useNearWallet();
   const [sheet, setSheet] = useState<Coin | null>(null);
   const [sheetAmount, setSheetAmount] = useState<number | undefined>(undefined);
   const [chooser, setChooser] = useState(false);
@@ -125,9 +145,13 @@ function Inner({ children }: { children: React.ReactNode }) {
   }, [toast]);
   const disconnect = useCallback((which: "near" | "x" | "play") => {
     if (which === "near") signOut().catch(() => {});
-    else if (which === "play") setPlay(null);
+    else if (which === "play") {
+      // A quick-punch account holds money only this device's key controls: it closes through "Cash out", never by forgetting the key.
+      if (isQuick(play)) { toast({ tone: "err", text: "Cash out your quick punches to your wallet first." }); return; }
+      setPlay(null);
+    }
     else { setX(null); saveX(null); setXNear(null); }
-  }, [signOut, setPlay]);
+  }, [signOut, setPlay, play, toast]);
 
   const call = useCallback<Ctx["call"]>(async ({ contractId, method, args, tgas, deposit = "0", ok }) => {
     if (!signedAccountId && play) {
@@ -185,11 +209,61 @@ function Inner({ children }: { children: React.ReactNode }) {
     act({ near: { contractId: NME.arena, method: "tick", args: { max_tasks: 8 }, tgas: 300 }, ok: "Poked. The arena ran its due tasks." });
   }, [act]);
 
+  // One device-signed punch at a time (parallel sends would reuse a nonce and fail); at most a few queued.
+  const punchQ = useRef<{ tail: Promise<void>; n: number }>({ tail: Promise.resolve(), n: 0 });
+  const punch = useCallback((coin: Coin) => {
+    if (!play) { setSheetAmount(MIN_HIT_NEAR); setSheet(coin); return; }
+    const q = punchQ.current;
+    if (q.n >= 4) { toast({ tone: "info", text: "Easy, champ: your last punches are still landing." }); return; }
+    announcePunch(coin.key, MIN_HIT_NEAR); // the blow lands on screen now; the chain confirms in a second or two
+    q.n++;
+    q.tail = q.tail.then(async () => {
+      try {
+        const minOut = minOutOf(await quoteBuy(coin, MIN_HIT_NEAR)); // after the router fee, 3% slippage floor
+        if (!minOut) throw new Error("no price for this coin right now, so nothing was sent.");
+        await deviceBuy(play, coin, MIN_HIT_NEAR, minOut);
+        announceChange();
+      } catch (e) {
+        toast({ tone: "err", text: `That punch missed: ${errText(e)}` });
+      } finally {
+        q.n--;
+      }
+    });
+  }, [play, toast]);
+
+  const quickLoad = useCallback(async (amountNear: number) => {
+    if (!signedAccountId) { setChooser(true); return false; }
+    try {
+      const id = quickAccount();
+      await signAndSendTransaction({ receiverId: id, actions: [{ type: "Transfer", params: { deposit: yocto(amountNear) } }] as never });
+      if (!play) { setPlayAccount(id); setPlayState(id); }
+      toast({ tone: "ok", text: `Loaded ${amountNear} NEAR. Every punch is one tap now, no wallet popups.` });
+      return true;
+    } catch (e) {
+      toast({ tone: "err", text: errText(e) });
+      return false;
+    }
+  }, [signedAccountId, signAndSendTransaction, play, toast]);
+
+  const cashOut = useCallback(async (tokens: string[]) => {
+    if (!signedAccountId) { toast({ tone: "info", text: "Connect the NEAR wallet that loaded it, so the money has somewhere to go." }); setChooser(true); return false; }
+    try {
+      await quickCashOut(signedAccountId, tokens, (t) => toast({ tone: "info", text: t }));
+      if (isQuick(play)) setPlay(null);
+      toast({ tone: "ok", text: `Cashed out. Your coins and NEAR are back in ${signedAccountId}.` });
+      announceChange();
+      return true;
+    } catch (e) {
+      toast({ tone: "err", text: errText(e) });
+      return false;
+    }
+  }, [signedAccountId, play, setPlay, toast]);
+
   const value = useMemo<Ctx>(() => ({
     account, nearWallet: signedAccountId ?? "", play, setPlay, x, xNear, refreshX: () => setXTick((v) => v + 1),
     connect: () => setChooser(true), connectNear, connectX, disconnect,
-    buy: (coin, amountNear) => { setSheetAmount(amountNear); setSheet(coin); }, poke, toast, call, act,
-  }), [account, signedAccountId, play, setPlay, x, xNear, connectNear, connectX, disconnect, poke, toast, call, act]);
+    buy: (coin, amountNear) => { setSheetAmount(amountNear); setSheet(coin); }, punch, quickLoad, cashOut, poke, toast, call, act,
+  }), [account, signedAccountId, play, setPlay, x, xNear, connectNear, connectX, disconnect, punch, quickLoad, cashOut, poke, toast, call, act]);
 
   return (
     <ActionsCtx.Provider value={value}>
@@ -199,10 +273,19 @@ function Inner({ children }: { children: React.ReactNode }) {
         <BuySheet
           coin={sheet}
           initial={sheetAmount}
-          payer={account ? { kind: "near", label: account, device: !signedAccountId && !!play } : x ? { kind: "x", label: walletName(x), balance: xNear } : null}
+          payer={play ? { kind: "near", label: play, device: true } : account ? { kind: "near", label: account } : x ? { kind: "x", label: walletName(x), balance: xNear } : null}
           onClose={() => setSheet(null)}
           onConnect={() => setChooser(true)}
           send={async (amountNear, minOut) => {
+            if (play) {
+              // Device account (Google sign-in or quick punch): signed right here, no popup.
+              announcePunch(sheet.key, amountNear);
+              const h = await deviceBuy(play, sheet, amountNear, minOut);
+              toast({ tone: "ok", text: `Bought $${sheet.ticker}. If a war is on, that was a hit.`, href: h ? `${NME.explorer}/txns/${h}` : undefined });
+              announceChange();
+              setSheet(null);
+              return;
+            }
             if (signedAccountId) {
               const reg = await view<unknown>(sheet.account, "storage_balance_of", { account_id: signedAccountId }).catch(() => null);
               const txs = [];
@@ -211,16 +294,7 @@ function Inner({ children }: { children: React.ReactNode }) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const outs = await signAndSendTransactions({ transactions: txs as any });
               const h = txHash(Array.isArray(outs) ? outs[outs.length - 1] : outs);
-              toast({ tone: "ok", text: `Bought $${sheet.ticker}. If a war is on, that was a hit.`, href: h ? `${NME.explorer}/txns/${h}` : undefined });
-              announceChange();
-              setSheet(null);
-              return;
-            }
-            if (play) {
-              // Google sign-in account: register on the coin if needed, then buy, both signed on this device.
-              const reg = await view<unknown>(sheet.account, "storage_balance_of", { account_id: play }).catch(() => null);
-              if (!reg) await playCall({ contractId: sheet.account, method: "storage_deposit", args: { account_id: play, registration_only: true }, tgas: 30, deposit: STORAGE_DEPOSIT });
-              const h = await playCall({ contractId: NME.arena, method: "buy", args: { key: sheet.key, min_out: minOut }, tgas: 300, deposit: yocto(amountNear) });
+              announcePunch(sheet.key, amountNear);
               toast({ tone: "ok", text: `Bought $${sheet.ticker}. If a war is on, that was a hit.`, href: h ? `${NME.explorer}/txns/${h}` : undefined });
               announceChange();
               setSheet(null);
@@ -230,7 +304,7 @@ function Inner({ children }: { children: React.ReactNode }) {
             const war = amountNear >= MIN_HIT_NEAR && (await inLiveWar(sheet.key));
             const body = { key: sheet.key, amount: yocto(amountNear), min_out: minOut };
             const ok = await act({ x: war ? { JoinWar: body } : { Buy: body }, ok: `Bought $${sheet.ticker}${war ? " and landed a hit" : ""}. The tokens sit in your NME balance.` });
-            if (ok) setSheet(null);
+            if (ok) { announcePunch(sheet.key, amountNear); setSheet(null); }
           }}
           onError={(e) => toast({ tone: "err", text: errText(e) })}
         />
