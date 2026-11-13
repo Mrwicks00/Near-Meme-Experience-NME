@@ -9,7 +9,7 @@ import type { Coin, Round } from "@/lib/nme";
 import { EvmChoice, XKind, XWallet, WalletAction, connectEvm, connectPhantom, signedAction, walletState } from "@/lib/xwallet";
 import { walletName } from "@/lib/xwallet";
 import { CoinIcon } from "./CoinIcon";
-import { minOutOf, quoteBuy } from "@/lib/quote";
+import { maxBuyNear, minOutOf, quoteBuy } from "@/lib/quote";
 import { WalletSheet } from "./WalletSheet";
 import { announceChange } from "@/lib/hooks";
 
@@ -228,7 +228,12 @@ function Inner({ children }: { children: React.ReactNode }) {
     q.tail = q.tail.then(async () => {
       try {
         const minOut = minOutOf(await quoteBuy(coin, MIN_HIT_NEAR)); // after the router fee, 3% slippage floor
-        if (!minOut) throw new Error("no price for this coin right now, so nothing was sent.");
+        if (!minOut) {
+          const max = await maxBuyNear(coin);
+          throw new Error(max > 0.0015
+            ? `$${coin.ticker}'s pool can only take about ${max.toFixed(2)} NEAR per buy right now (thin liquidity at this price), so a ${MIN_HIT_NEAR} NEAR punch can't go through. Nothing was sent.`
+            : `$${coin.ticker}'s pool can't take buys right now. Nothing was sent.`);
+        }
         await deviceBuy(play, coin, MIN_HIT_NEAR, minOut);
         announceChange();
       } catch (e) {

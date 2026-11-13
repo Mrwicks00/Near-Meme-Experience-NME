@@ -502,7 +502,7 @@ export default function Arena3D({ a, b, hits, outcome, practice }: { a: Fighter;
   }, [a.ticker, b.ticker]);
 
   return (
-    <Canvas dpr={[1, 1.75]} shadows={mobile ? false : { type: THREE.PCFShadowMap }} camera={{ position: [0, 5.4, 12.2], fov: 40 }} gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}>
+    <Canvas dpr={[1, 1.75]} shadows={mobile ? false : { type: THREE.PCFShadowMap }} camera={{ position: [0, 5.4, 12.2], fov: mobile ? 62 : 40 }} gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}>
       <color attach="background" args={[NIGHT]} />
       <fog attach="fog" args={["#e2b98c", 40, 80]} />
       {/* golden hour: a real sky panorama lights the stone (CC0, Poly Haven), the low sun throws long shadows */}

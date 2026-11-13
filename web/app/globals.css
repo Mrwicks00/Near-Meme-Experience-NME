@@ -187,6 +187,19 @@ body {
 .pop-slow {
   animation: pop-slow 6s ease-out forwards;
 }
+/* War talk bubble: eases in, stays, fades out over its 8 s on screen. */
+@keyframes talk {
+  0% { transform: translateY(-6px); opacity: 0; }
+  8% { transform: translateY(0); opacity: 1; }
+  88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.nme-pop {
+  animation: talk 8s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nme-pop { animation: none; }
+}
 
 /* Pill button: accent fill, hairline edge, soft lift on hover. */
 .btn {

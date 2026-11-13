@@ -2,13 +2,14 @@
 # Idempotent: re-pins the arena's brain worker (same code layout; `migrate_brain` changes only brain_url + brain_hash).
 # 2026-11-11: worker with Qwen3.6-35B-A3B and thinking off (the old model ran past OutLayer's ~30 s limit) and an upload-RPC fallback.
 # 2026-11-13: meme jobs return once the picture upload is in a block (no FastFS wait), every network wait capped, step timings.
+# 2026-11-13: brain rules cut to two (no sexual content, no harassment of real people); cartoon coin-vs-coin roasts allowed.
 # Run ONLY after `cargo test --workspace` exited 0. The worker must be on FastFS with its secrets stored for this exact hash.
 #   NME_BRAIN_HASH   sha256 of the brain worker
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="${NME_ROOT:-nme.testnet}"; ARENA="arena.$ROOT"; WASM=contracts/target/near
 export NEAR_RPC="${NEAR_RPC:-https://archival-rpc.testnet.fastnear.com}"
-HASH="${NME_BRAIN_HASH:-49048a8dcf764a314f70bab9d3bc9297098e5ea586ea4219f05544b5796b5132}"
+HASH="${NME_BRAIN_HASH:-8264a8bfa4dd0c7d585d7c4afb6a2c0e9e7bd0e765dd2dcb669c2288d3e087ee}"
 URL="https://test.fastfs.io/nme-s4.testnet/outlayer.testnet/$HASH.wasm"
 [ -f "$WASM/nme_arena/nme_arena.wasm" ] || scripts/build-contracts.sh
 [ "$(curl -s "$URL" | sha256sum | cut -d' ' -f1)" = "$HASH" ] || { echo "worker at $URL does not hash to $HASH - stop"; exit 1; }

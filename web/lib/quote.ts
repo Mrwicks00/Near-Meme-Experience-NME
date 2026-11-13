@@ -26,3 +26,22 @@ export async function quoteBuy(coin: Coin, amountNear: number, afterFee = true):
 
 /** 3% slippage floor; null when there is no quote (we never send min_out 0). */
 export const minOutOf = (raw: string | null) => (raw ? ((BigInt(raw) * 97n) / 100n).toString() : null);
+
+/** The largest buy (NEAR, after the router fee) the coin's pool can fill right now: DCL quotes 0 when a swap can't be
+ *  filled in full, so search between 0.001 and 5 NEAR. Cached for a minute per coin. */
+const maxCache = new Map<string, { at: number; v: Promise<number> }>();
+export function maxBuyNear(coin: Coin): Promise<number> {
+  const c = maxCache.get(coin.key);
+  if (c && Date.now() - c.at < 60_000) return c.v;
+  const v = (async () => {
+    if (await quoteBuy(coin, 5, false)) return 5;
+    let lo = 0, hi = 5;
+    for (let i = 0; i < 9; i++) {
+      const m = (lo + hi) / 2;
+      if (await quoteBuy(coin, Math.max(m, 0.001), false)) lo = m; else hi = m;
+    }
+    return lo;
+  })();
+  maxCache.set(coin.key, { at: Date.now(), v });
+  return v;
+}

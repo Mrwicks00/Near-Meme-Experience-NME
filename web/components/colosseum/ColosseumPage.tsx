@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useArena, useCoins, useCommentary, useFeed, useNow } from "@/lib/hooks";
 import { ago, clock, compact, near } from "@/lib/format";
-import { describe, displayTicker, prettyText } from "@/lib/nme";
+import { describe, displayTicker, prettyText, type Coin } from "@/lib/nme";
+import { quoteBuy } from "@/lib/quote";
 import { FightPoster, phaseOf } from "../FightPoster";
 import { PUNCH_EVENT, type PunchDetail, useActions } from "../Actions";
 import { QuickPunch } from "../QuickPunch";
@@ -121,9 +122,36 @@ export function ColosseumPage() {
     }
   }
 
-  // Latest AI line from either fighter becomes a speech bubble.
-  const said = (commentary.data ?? []).find((x) => x.ticker === keyA || x.ticker === keyB);
-  const bubble: Bubble = said ? { side: said.ticker === keyA ? "a" : "b", text: prettyText(said.text) } : null;
+  // War talk: every AI line from the two fighters, newest first. A new line pops as a small bubble for 8 s, then lives
+  // in the War talk panel under the fight bar.
+  const talk = (commentary.data ?? []).filter((x) => x.ticker === keyA || x.ticker === keyB);
+  const latest = talk[0];
+  const [shownSeq, setShownSeq] = useState<number | null>(null);
+  useEffect(() => {
+    if (!latest || latest.seq === shownSeq) return;
+    if (now && now - latest.ts_ms > 5 * 60_000) return; // old lines go straight to the panel
+    const t0 = setTimeout(() => setShownSeq(latest.seq), 0);
+    const t1 = setTimeout(() => setShownSeq((v) => (v === latest.seq ? -latest.seq : v)), 8000);
+    return () => { clearTimeout(t0); clearTimeout(t1); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latest?.seq]);
+  const bubble: Bubble = latest && shownSeq === latest.seq ? { side: latest.ticker === keyA ? "a" : "b", text: prettyText(latest.text) } : null;
+  const [talkOpen, setTalkOpen] = useState(false);
+
+  // A fighter whose pool can't fill a scoring buy (0.25 NEAR) can't be punched: say so instead of failing on tap.
+  const [thin, setThin] = useState<{ a: boolean; b: boolean }>({ a: false, b: false });
+  useEffect(() => {
+    if (!fighting || !A || !B) return;
+    let alive = true;
+    const check = async () => {
+      const ok = async (c: Coin) => !!(await quoteBuy(c, 0.25));
+      const [a, b] = await Promise.all([ok(A), ok(B)]);
+      if (alive) setThin({ a: !a, b: !b });
+    };
+    check();
+    const t = setInterval(check, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, [fighting, A, B]);
 
   const wars = feed.items.filter((f) => f.kind.startsWith("war_"));
   const war = arena.data?.war;
@@ -175,22 +203,52 @@ export function ColosseumPage() {
           </div>
 
           {bubble && (
-            <div className={`pointer-events-none absolute bottom-24 max-w-[min(360px,80vw)] rounded-[1.3rem] border border-ink bg-lilac-deep p-4 shadow-[0_18px_40px_-22px_var(--color-drop)] ${bubble.side === "a" ? "left-4 rounded-bl-sm sm:left-6" : "right-4 rounded-br-sm sm:right-6"}`}>
-              <p className="mb-1 text-xs font-semibold"><span className="chip mr-1 bg-paper">AI</span> ${bubble.side === "a" ? tA : tB} says</p>
-              <p className="font-serif text-[1.05rem] leading-snug">{bubble.text.length > 160 ? bubble.text.slice(0, 160) + "…" : bubble.text}</p>
+            <div className={`nme-pop pointer-events-none absolute top-28 max-w-[min(300px,70vw)] rounded-2xl border border-ink bg-lilac-deep px-3 py-2 shadow-[0_18px_40px_-22px_var(--color-drop)] sm:top-32 ${bubble.side === "a" ? "left-3 rounded-tl-sm sm:left-6" : "right-3 rounded-tr-sm sm:right-6"}`}>
+              <p className="text-[0.7rem] font-semibold">${bubble.side === "a" ? tA : tB} says</p>
+              <p className="font-serif text-sm leading-snug">{bubble.text.length > 90 ? bubble.text.slice(0, 90) + "…" : bubble.text}</p>
             </div>
           )}
 
-          <div className="flex flex-col items-center justify-between gap-3 border-t border-ink bg-night px-4 py-4 text-cream sm:flex-row sm:px-8">
-            <button className="btn bg-mint text-ink disabled:opacity-40" disabled={!A || !fighting} onClick={() => A && fighting && punch(A)}>{fighting ? `${play ? "Punch" : "Buy"} $${tA}` : "Round over"}</button>
-            <p className="text-center">
-              {!phase ? "…" : phase.kind === "live" ? <span className="flex flex-col items-center leading-tight"><span className="font-display text-3xl tnum">{clock(phase.endsMs - now)} left in the fight</span><span className="text-sm text-cream/80">Buy 0.25 NEAR or more of either side to land a punch</span></span>
+          {/* Phones: the clock on top, both punch buttons side by side under it. Wide screens: button, clock, button. */}
+          <div className="grid grid-cols-2 items-center gap-3 border-t border-ink bg-night px-4 py-4 text-cream sm:grid-cols-[auto_1fr_auto] sm:px-8">
+            <div className="col-span-2 text-center sm:col-span-1 sm:col-start-2 sm:row-start-1">
+              {!phase ? "…" : phase.kind === "live" ? <span className="flex flex-col items-center leading-tight"><span className="font-display text-2xl tnum sm:text-3xl">{clock(phase.endsMs - now)} left in the fight</span><span className="text-xs text-cream/80 sm:text-sm">Buy 0.25 NEAR or more of either side to land a punch</span></span>
                 : phase.kind === "bell" ? <>The bell rang {ago(phase.endedMs, now)}. <button className="pointer-events-auto underline" onClick={poke}>Settle the round</button></>
                 : <>No fight on. <button className="underline" onClick={poke}>Open the next round</button></>}
-            </p>
-            <button className="btn bg-mint text-ink disabled:opacity-40" disabled={!B || !fighting} onClick={() => B && fighting && punch(B)}>{fighting ? `${play ? "Punch" : "Buy"} $${tB}` : "Round over"}</button>
+            </div>
+            {([["a", A, tA], ["b", B, tB]] as const).map(([side, c, t]) => {
+              const dry = fighting && thin[side];
+              return (
+                <button key={side} className={`btn min-w-0 px-3 text-ink disabled:opacity-40 ${side === "a" ? "bg-red sm:col-start-1" : "bg-blue sm:col-start-3"} sm:row-start-1`} disabled={!c || !fighting || dry} onClick={() => c && fighting && !dry && punch(c)} title={dry ? `$${t}'s pool can't fill a 0.25 NEAR buy right now` : undefined}>
+                  <span className="truncate">{!fighting ? "Round over" : dry ? `$${t} pool too thin` : `${play ? "Punch" : "Buy"} $${t}`}</span>
+                </button>
+              );
+            })}
           </div>
           {fighting && <div className="border-t border-cream/15 bg-night px-4 pb-4 text-cream sm:px-8"><QuickPunch dark /></div>}
+          {talk.length > 0 && (
+            <div className="border-t border-cream/15 bg-night px-4 pb-4 text-cream sm:px-8">
+              <button className="mt-3 flex w-full items-center justify-between rounded-2xl border border-cream/25 px-4 py-2.5 text-left text-sm font-semibold" aria-expanded={talkOpen} onClick={() => setTalkOpen((v) => !v)}>
+                <span>💬 War talk · ${tA} vs ${tB} <span className="font-normal text-cream/70">({talk.length})</span></span>
+                <span aria-hidden>{talkOpen ? "▲" : "▼"}</span>
+              </button>
+              {talkOpen && (
+                <ol className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
+                  {talk.slice(0, 12).map((x) => {
+                    const left = x.ticker === keyA;
+                    return (
+                      <li key={x.seq} className={`flex ${left ? "justify-start" : "justify-end"}`}>
+                        <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${left ? "rounded-tl-sm bg-red-deep" : "rounded-tr-sm bg-blue-deep text-right"}`}>
+                          <p className="text-[0.7rem] font-semibold text-cream/80">${left ? tA : tB} · {now ? ago(x.ts_ms, now) : ""}</p>
+                          <p className="font-serif leading-snug">{prettyText(x.text)}</p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          )}
         </section>
       )}
 
