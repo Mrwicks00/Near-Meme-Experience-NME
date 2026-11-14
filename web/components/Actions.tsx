@@ -45,10 +45,10 @@ type Ctx = {
   buy: (coin: Coin, amountNear?: number) => void;
   /** Fight button: a device account (Google or quick punch) buys the minimum hit at once, no sheet; others get the buy sheet. */
   punch: (coin: Coin) => void;
-  /** NEAR wallet: send `amountNear` once to this device's quick-punch account. */
+  /** Send `amountNear` once to this device's quick-punch account: from a NEAR wallet, or from a Phantom / MetaMask NME balance. */
   quickLoad: (amountNear: number) => Promise<boolean>;
-  /** Quick-punch account: send its coins and NEAR back to the NEAR wallet and close it. */
-  cashOut: (tokens: string[]) => Promise<boolean>;
+  /** Quick-punch account: send its coins and NEAR to `to` (default: the connected NEAR wallet) and close it. */
+  cashOut: (tokens: string[], to?: string) => Promise<boolean>;
   poke: () => void;
   toast: (t: Toast) => void;
   /** NEAR-account-only call. */
@@ -248,6 +248,13 @@ function Inner({ children }: { children: React.ReactNode }) {
   }, [play, toast]);
 
   const quickLoad = useCallback(async (amountNear: number) => {
+    if (!signedAccountId && x) {
+      // Phantom / MetaMask: one signature moves NEAR from the wallet's NME balance to the quick-punch account.
+      const id = quickAccount();
+      const ok = await act({ x: { TransferNear: { to: id, amount: yocto(amountNear) } }, ok: `Loaded ${amountNear} NEAR. Every punch is one tap now, no wallet popups.` });
+      if (ok && !play) { setPlayAccount(id); setPlayState(id); }
+      return ok;
+    }
     if (!signedAccountId) { setChooser(true); return false; }
     try {
       const id = quickAccount();
@@ -259,14 +266,15 @@ function Inner({ children }: { children: React.ReactNode }) {
       toast({ tone: "err", text: errText(e) });
       return false;
     }
-  }, [signedAccountId, signAndSendTransaction, play, toast]);
+  }, [signedAccountId, signAndSendTransaction, play, toast, x, act]);
 
-  const cashOut = useCallback(async (tokens: string[]) => {
-    if (!signedAccountId) { toast({ tone: "info", text: "Connect the NEAR wallet that loaded it, so the money has somewhere to go." }); setChooser(true); return false; }
+  const cashOut = useCallback(async (tokens: string[], to?: string) => {
+    const dest = to || signedAccountId;
+    if (!dest) { toast({ tone: "info", text: "Name a NEAR account to send it to, or connect a NEAR wallet." }); return false; }
     try {
-      await quickCashOut(signedAccountId, tokens, (t) => toast({ tone: "info", text: t }));
+      await quickCashOut(dest, tokens, (t) => toast({ tone: "info", text: t }));
       if (isQuick(play)) setPlay(null);
-      toast({ tone: "ok", text: `Cashed out. Your coins and NEAR are back in ${signedAccountId}.` });
+      toast({ tone: "ok", text: `Cashed out. Your coins and NEAR are in ${dest}.` });
       announceChange();
       return true;
     } catch (e) {

@@ -225,6 +225,7 @@ export function WalletSheet({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
               <TopUp x={x} />
+              {!account && <div className="mt-3"><QuickPunch /></div>}
               <button className="mt-3 text-sm underline" onClick={() => disconnect("x")}>Disconnect {walletName(x)}</button>
             </div>
           )}

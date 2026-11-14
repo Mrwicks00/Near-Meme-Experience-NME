@@ -7,15 +7,18 @@
 import { useEffect, useState } from "react";
 import { useCoins } from "@/lib/hooks";
 import { compact, near } from "@/lib/format";
-import { isQuick, playBalance, playTopup } from "@/lib/play";
+import { isQuick, playBalance, playSecret, playTopup } from "@/lib/play";
+import { walletName } from "@/lib/xwallet";
 import { PUNCH_EVENT, useActions } from "./Actions";
 import { GoogleSignIn } from "./GoogleSignIn";
 
 export function QuickPunch({ dark }: { dark?: boolean }) {
-  const { play, nearWallet, x, quickLoad, cashOut, toast } = useActions();
+  const { play, nearWallet, x, xNear, quickLoad, cashOut, toast } = useActions();
   const coins = useCoins();
   const [bal, setBal] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dest, setDest] = useState<string | null>(null); // cash-out target typed by a Phantom / MetaMask user
+  const [showKey, setShowKey] = useState(false);
   const quick = isQuick(play);
 
   useEffect(() => {
@@ -49,26 +52,50 @@ export function QuickPunch({ dark }: { dark?: boolean }) {
 
   if (quick) {
     const low = bal !== null && bal < 0.6;
+    const tokens = (coins.data ?? []).map((c) => c.account);
+    const canLoad = !!nearWallet || !!x;
     return (
       <div className={box}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p><strong>⚡ Quick punches</strong> · {bal === null ? "…" : `${compact(bal)} NEAR left`}{low ? " · top up to keep punching" : ""}</p>
           <div className="flex flex-wrap gap-2">
-            {nearWallet && <button className={chip} disabled={busy} onClick={() => run(() => quickLoad(1))}>+1 NEAR</button>}
+            {canLoad && <button className={chip} disabled={busy} onClick={() => run(() => quickLoad(1))}>+1 NEAR</button>}
             <button className={chip} disabled={busy} onClick={() => {
-              if (confirm("Send every coin and all the NEAR in your quick-punch account back to your wallet, and close it?")) run(() => cashOut((coins.data ?? []).map((c) => c.account)));
-            }}>{busy ? "Working…" : "Cash out to wallet"}</button>
+              if (nearWallet) { if (confirm("Send every coin and all the NEAR in your quick-punch account back to your wallet, and close it?")) run(() => cashOut(tokens)); }
+              else setDest((v) => (v === null ? "" : null));
+            }}>{busy ? "Working…" : nearWallet ? "Cash out to wallet" : "Cash out"}</button>
           </div>
         </div>
-        <p className={`mt-1 text-xs ${dark ? "text-cream/70" : "text-ink-2"}`}>Signed on this device, no popups. Coins you buy sit here until you cash out.</p>
+        {dest !== null && !nearWallet && (
+          <div className="mt-2 space-y-2">
+            <p className="text-xs">Phantom and MetaMask balances can only be filled by deposits, so cash out goes to a NEAR account. Type one (for example yourname.testnet), or keep playing and back up the key below.</p>
+            <div className="flex gap-2">
+              <input value={dest} onChange={(e) => setDest(e.target.value.trim().toLowerCase())} placeholder="yourname.testnet" className="min-w-0 flex-1 rounded-full border border-ink bg-paper px-3 py-2 text-ink" />
+              <button className={chip} disabled={busy || !/^([a-z0-9_-]+\.)*[a-z0-9_-]+$/.test(dest) || dest.length < 2} onClick={() => {
+                if (confirm(`Send every coin and all the NEAR in your quick-punch account to ${dest}, and close it?`)) run(() => cashOut(tokens, dest));
+              }}>Send</button>
+            </div>
+          </div>
+        )}
+        <p className={`mt-1 text-xs ${dark ? "text-cream/70" : "text-ink-2"}`}>
+          Signed on this device, no popups. Coins you buy sit here until you cash out.{" "}
+          <button className="underline" onClick={() => setShowKey((v) => !v)}>{showKey ? "Hide key" : "Back up key"}</button>
+        </p>
+        {showKey && (
+          <p className="mt-2 break-all rounded-xl border border-ink bg-paper p-2 font-mono text-[0.7rem] text-ink">
+            {play}<br />{playSecret()}<br /><span className="font-sans">Anyone with this key controls the account. Import it in any NEAR wallet to use it there.</span>
+          </p>
+        )}
       </div>
     );
   }
 
-  if (nearWallet) {
+  if (nearWallet || x) {
     return (
       <div className={box}>
-        <p><strong>Wallet popups slow your punches.</strong> Load NEAR once and every punch is one tap. Cash out to {nearWallet.length > 20 ? nearWallet.slice(0, 14) + "…" : nearWallet} anytime.</p>
+        {nearWallet
+          ? <p><strong>Wallet popups slow your punches.</strong> Load NEAR once and every punch is one tap. Cash out to {nearWallet.length > 20 ? nearWallet.slice(0, 14) + "…" : nearWallet} anytime.</p>
+          : <p><strong>{walletName(x!)} popups slow your punches.</strong> Sign once to move NEAR from your NME balance ({xNear === null ? "…" : `${compact(xNear)} NEAR`}) to a quick-punch account on this device, then every punch is one tap.</p>}
         <div className="mt-2 flex flex-wrap gap-2">
           {[1, 2, 5].map((n) => <button key={n} className={chip} disabled={busy} onClick={() => run(() => quickLoad(n))}>Load {n} NEAR</button>)}
         </div>
