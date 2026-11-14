@@ -79,7 +79,7 @@ export function Widget({ coinKey }: { coinKey: string }) {
                   <div className="mt-2 h-4 overflow-hidden rounded-full border border-ink bg-night/50" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share * 100)} aria-label={`$${c.ticker} share of hits`}>
                     <div className="h-full bg-red" style={{ width: `${Math.max(4, share * 100)}%` }} />
                   </div>
-                  <p className="mt-1.5 text-xs">Every buy of 0.25 NEAR or more is a hit. The loser&apos;s chest buys the winner and burns it.</p>
+                  <p className="mt-1.5 text-xs">Every buy of 0.26 NEAR or more is a hit. The loser&apos;s chest buys the winner and burns it.</p>
                 </>
               ) : bell ? (
                 <p className="text-sm"><strong>Fight with ${rival} is over</strong>, waiting for anyone to ring the bell and settle it.</p>

@@ -8,7 +8,7 @@ import { ago, compact, near, scale } from "@/lib/format";
 import { useCoins, useFeed, useNow, usePolled } from "@/lib/hooks";
 import {
   Coin, CrownStatus, DefenseConfig, DefenseState, Delivery, JOB_KINDS, describe, bagState, BAG_TONE, holderName, timeLeft, walletLabel,
-  prettyText, loadBalance, loadCoin, loadCrown, loadDefenseConfig, loadDefenseState, loadDeliveries, loadJobPrice, pendingBurns, quoteSell,
+  prettyText, loadVault, loadBalance, loadBrainConfig, loadCoin, loadCrown, loadDefenseConfig, loadDefenseState, loadDeliveries, loadJobPrice, jobSplit, pendingBurns, quoteSell,
 } from "@/lib/nme";
 import { CoinIcon, useIconTint } from "../CoinIcon";
 import { TONE_BG } from "../Times";
@@ -121,6 +121,8 @@ export function Hire({ coin, deliveries }: { coin: Coin; deliveries: Delivery[] 
   const [target, setTarget] = useState("");
   const [prompt, setPrompt] = useState("");
   const price = usePolled(() => loadJobPrice(coin.key), 0, [coin.key]).data;
+  const brainCfg = usePolled(() => loadBrainConfig(), 0, []).data;
+  const split = price && brainCfg ? jobSplit(price, brainCfg) : null;
   // Only roast and meme aim at someone else; shill and lore are always about this coin, so they send no target.
   const hasTarget = kind === "roast" || kind === "meme";
   const sentTarget = hasTarget ? target : "";
@@ -154,7 +156,7 @@ export function Hire({ coin, deliveries }: { coin: Coin; deliveries: Delivery[] 
         </Field>
       </div>
       <div className="mt-4 rounded-2xl border border-ink bg-paper p-4 text-sm leading-relaxed">
-        <strong className="num">You pay {price ? `${compact(p)} NEAR` : "…"}.</strong> When the job is delivered, about {compact(p * 0.9)} NEAR buys ${coin.ticker} and burns it. If it isn&apos;t delivered before the deadline, you can take your money back.
+        <strong className="num">You pay {price ? `${compact(p)} NEAR` : "…"}.</strong> {split ? <>When the job is delivered, about {compact(split.burn)} NEAR ({split.burnPct}%) buys ${coin.ticker} and burns it; the rest pays the AI run and storage. If it fails or misses the deadline, the {compact(split.escrow)} NEAR in escrow comes back to you, and OutLayer returns most of its fee.</> : "…"}
       </div>
       <button className="btn mt-4 w-full bg-night text-cream" disabled={!ok}
         onClick={() => act({ near: { contractId: NME.arena, method: "hire", args: { ticker: coin.key, kind, target: sentTarget, prompt }, tgas: HIRE_TGAS, deposit: price! }, x: { Hire: { ticker: coin.key, kind, target: sentTarget, prompt, amount: price! } }, ok: `Hired $${coin.ticker} for a ${kind}. The answer lands in the deliveries below.` }).then((d) => d && setPrompt(""))}>
@@ -238,7 +240,12 @@ export function PumpBag({ coin, crown, xOwner }: { coin: Coin; crown: CrownStatu
   const { account, x, call, act } = useActions();
   const now = useNow(30000);
   const gwOwner = usePolled(crown?.owner === NME.gateway ? () => crownOwnerOf(coin.key) : null, 0, [crown?.owner, coin.key]).data;
+  const vault = usePolled(crown?.vault ? () => loadVault(crown.vault) : null, 30000, [crown?.vault]).data;
   if (!crown) return null;
+  const tk = (y: string) => compact(Number(BigInt(y) / 10n ** 14n) / 10_000); // 18-decimal coin units
+  const vestPct = vault && BigInt(vault.vest.total) > 0n ? Number((BigInt(vault.vested_now) * 1000n) / BigInt(vault.vest.total)) / 10 : 0;
+  const cliffEnd = vault ? vault.vest.start_ms + vault.vest.cliff_ms : 0;
+  const vestEnd = vault ? vault.vest.start_ms + vault.vest.duration_ms : 0;
   // A wallet-launched coin's PumpBag is held by the gateway for the wallet key that launched it (D-59).
   const viaGateway = !!x && crown.owner === NME.gateway && xOwner === x.owner;
   const mine = account === crown.owner || viaGateway;
@@ -255,24 +262,41 @@ export function PumpBag({ coin, crown, xOwner }: { coin: Coin; crown: CrownStatu
         <div className="flex justify-between gap-4"><dt>Must check in every</dt><dd>{timeLeft(crown.inactivity_ms)}</dd></div>
         <div className="flex items-center justify-between gap-4"><dt>Status</dt><dd><span className={`chip ${BAG_TONE[st.tone]}`}>{crown.forfeited ? "Forfeited: fees go to the treasury" : st.label}</span></dd></div>
       </dl>
+      {vault && (
+        <div className="mt-5 rounded-2xl border border-ink bg-paper-2 p-4 text-sm">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="font-semibold">Vesting</p>
+            <p className="num">{tk(vault.vested_now)} of {tk(vault.vest.total)} ${coin.ticker} · {vestPct}%</p>
+          </div>
+          <div className="mt-2 h-3 overflow-hidden rounded-full border border-ink bg-night/40" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={vestPct} aria-label="Vested share of the creator's bag">
+            <div className="h-full bg-lime" style={{ width: `${Math.max(2, vestPct)}%` }} />
+          </div>
+          <dl className="num mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-4">
+            <div><dt className="text-ink-2">Claimable now</dt><dd className="font-bold">{tk(vault.claimable_now)}</dd></div>
+            <div><dt className="text-ink-2">Already claimed</dt><dd className="font-bold">{tk(vault.released)}</dd></div>
+            <div><dt className="text-ink-2">Fees waiting</dt><dd className="font-bold">{compact(near(vault.fees_near))} NEAR</dd></div>
+            <div><dt className="text-ink-2">{vault.forfeited ? "Vesting" : now < cliffEnd ? "Cliff ends" : now < vestEnd ? "Fully vested" : "Vesting"}</dt><dd className="font-bold">{vault.forfeited ? "frozen" : now < cliffEnd ? `in ${timeLeft(cliffEnd - now)}` : now < vestEnd ? `in ${timeLeft(vestEnd - now)}` : "done"}</dd></div>
+          </dl>
+        </div>
+      )}
       {mine && !crown.forfeited && (
         <p className={`mt-4 rounded-2xl border border-ink p-3 text-sm ${st.tone === "ok" ? "bg-lime-deep" : "bg-yolk"}`}>
           You hold this PumpBag. Press <strong>I&apos;m still here</strong> before {st.left > 0 ? `the deadline (in ${timeLeft(st.left)})` : "anyone forfeits it"}; only that button restarts the clock. Claiming does not.
         </p>
       )}
-      {mine && !crown.forfeited && (
+      {mine && (
         <div className="mt-5 grid gap-2 sm:grid-cols-3">
-          <button className="btn bg-mint text-sm" onClick={() => viaGateway
+          {!crown.forfeited && <button className="btn bg-mint text-sm" onClick={() => viaGateway
             ? act({ x: { CrownClaimFees: { ticker: coin.key } }, ok: "Fees claimed into your NME balance." })
-            : call({ contractId: NME.crown, method: "crown_claim_fees", args: { token_id: coin.key }, tgas: 300, deposit: ONE_YOCTO, ok: "Fees claimed to your wallet." })}>Claim fees</button>
+            : call({ contractId: NME.crown, method: "crown_claim_fees", args: { token_id: coin.key }, tgas: 300, deposit: ONE_YOCTO, ok: "Fees claimed to your wallet." })}>Claim fees</button>}
           <button className="btn bg-mint text-sm" onClick={async () => {
             if (viaGateway) return act({ x: { CrownClaimVested: { ticker: coin.key } }, ok: "Vested tokens added to your NME balance." });
             const reg = await view(coin.account, "storage_balance_of", { account_id: account }).catch(() => null);
             call({ contractId: NME.crown, method: "crown_claim_vested", args: { token_id: coin.key }, tgas: 300, deposit: reg ? ONE_YOCTO : STORAGE, ok: "Vested tokens sent to your wallet." });
           }}>Claim vested</button>
-          <button className="btn bg-paper text-sm" onClick={() => viaGateway
+          {!crown.forfeited && <button className="btn bg-paper text-sm" onClick={() => viaGateway
             ? act({ x: { CrownHeartbeat: { ticker: coin.key } }, ok: "Heartbeat sent. The inactivity clock restarted." })
-            : call({ contractId: NME.crown, method: "crown_heartbeat", args: { token_id: coin.key }, tgas: 30, ok: "Heartbeat sent. The inactivity clock restarted." })}>I&apos;m still here</button>
+            : call({ contractId: NME.crown, method: "crown_heartbeat", args: { token_id: coin.key }, tgas: 30, ok: "Heartbeat sent. The inactivity clock restarted." })}>I&apos;m still here</button>}
         </div>
       )}
       {canForfeit && (

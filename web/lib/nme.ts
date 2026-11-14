@@ -295,6 +295,9 @@ export const holderName = (acct?: string | null) => {
 };
 
 export const loadCrown = (ticker: string) => view<CrownStatus | null>(NME.crown, "crown_status", { token_id: ticker });
+/** The PumpBag vault: the vesting schedule, what has vested and been released, and pool fees waiting for the holder. */
+export type VaultView = { vest: { total: string; start_ms: number; cliff_ms: number; duration_ms: number }; vested_now: string; released: string; claimable_now: string; fees_near: string; forfeited: boolean };
+export const loadVault = (vault: string) => view<VaultView>(vault, "get_vault");
 export const loadDefenseConfig = () => view<DefenseConfig>(NME.arena, "get_defense_config");
 export const loadDefenseState = (ticker: string) => view<DefenseState | null>(NME.arena, "get_defense_state", { ticker });
 export const loadJobPrice = (ticker: string) => view<string>(NME.arena, "get_job_price", { ticker });
@@ -341,7 +344,18 @@ export async function quoteSell(coin: Coin, rawAmount: string): Promise<string |
 
 export type Job = { id: number; ticker: string; kind: string; payer: string; amount: string; status: "Requested" | "Delivered" | "Burned" | "Refunded"; deadline_ms: number };
 export const loadJob = (job_id: number) => view<Job | null>(NME.arena, "get_job", { job_id });
-export const loadBrainConfig = () => view<{ cut_bps: number }>(NME.arena, "get_brain_config");
+export type BrainConfig = { cut_bps: number; outlayer_fee: string; record_reserve: string };
+export const loadBrainConfig = () => view<BrainConfig>(NME.arena, "get_brain_config");
+/** Where a job payment goes (arena open_job): OutLayer's fee and the job record's storage come off first, the rest is
+ *  escrowed; on delivery `cut_bps` of the escrow pays the protocol and the remainder buys and burns the coin. */
+export function jobSplit(priceYocto: string, cfg: BrainConfig): { escrow: number; burn: number; burnPct: number } {
+  const price = BigInt(priceYocto);
+  const escrowY = price - BigInt(cfg.outlayer_fee) - BigInt(cfg.record_reserve);
+  const escrow = escrowY > 0n ? near(escrowY.toString()) : 0;
+  const burn = escrow * (1 - cfg.cut_bps / 10000);
+  const p = near(priceYocto);
+  return { escrow, burn, burnPct: p > 0 ? Math.round((burn / p) * 100) : 0 };
+}
 
 /** Delivered jobs whose buy-and-burn hasn't run yet (it runs at the next arena poke), and roughly how many tokens it will burn. */
 export async function pendingBurns(coin: Coin, jobIds: number[]): Promise<{ near: number; jobs: number; tokens: number | null }> {

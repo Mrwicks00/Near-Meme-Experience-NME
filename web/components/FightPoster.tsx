@@ -139,7 +139,7 @@ export function FightPoster({ arena, coins, loading, error }: { arena: Arena | n
         {phase.kind === "live" && (
           <>
             <p className="font-display text-3xl tnum">{clock(phase.endsMs - now)} left in the fight</p>
-            <p className="text-sm text-cream/80">Every buy of 0.25 NEAR or more is a punch. When time runs out, the loser&apos;s war chest buys the winner and burns it.</p>
+            <p className="text-sm text-cream/80">Every buy of 0.26 NEAR or more is a punch. When time runs out, the loser&apos;s war chest buys the winner and burns it.</p>
           </>
         )}
         {phase.kind === "bell" && (

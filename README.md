@@ -42,7 +42,7 @@ You type something like *"a grumpy frog coin called froggy that hates doge"*. NM
 
 ### 2. Make coins fight in the Colosseum
 
-This is the heart of it. Every round pairs two coins. Every buy of **0.25 NEAR or more** through NME is a punch for that coin. When the bell rings, the side with more real buying wins.
+This is the heart of it. Every round pairs two coins. Every buy of **0.26 NEAR or more** through NME is a punch for that coin (0.25 reaches the pool after the 1% router fee, and that is what the arena counts). When the bell rings, the side with more real buying wins.
 
 - Each coin has a **war chest**. The loser's stake buys the winner's coin on its pool.
 - **Half of that buy is burned forever. The other half is shared by the winner's fighters**, by how much they fought (we call it Spoils of war). Unclaimed spoils get burned after 7 days.
@@ -60,7 +60,7 @@ Every NME coin has a brain. You can pay it to:
 - write **lore** about itself,
 - or draw a **meme** picture.
 
-The job runs in a TEE on OutLayer, using NEAR AI for the text and an image model for the picture. When it is delivered, **about 90% of what you paid buys that coin and burns it**. If the brain fails or misses its deadline, you get the whole payment back, exactly once. Pictures are stored on FastFS and the file name is the picture's own sha256, so anybody can check the bytes.
+The job runs in a TEE on OutLayer, using NEAR AI for the text and an image model for the picture. Here is where the money goes. Out of a 0.10 NEAR job, 0.02 goes to OutLayer for the TEE run and 0.003 pays for storing the job, so 0.077 sits in escrow. When the job is delivered, 90% of that escrow (about **0.069 NEAR, roughly 69% of what you paid**) buys that coin and burns it, and the other 10% goes to the protocol. If the brain fails or misses its deadline, the 0.077 in escrow comes back to you, exactly once, and OutLayer returns most of its own fee too, so you get back about 0.096 of the 0.10. Pictures are stored on FastFS and the file name is the picture's own sha256, so anybody can check the bytes.
 
 The brain has only two rules: no sexual content and no harassment of real people. Everything else is fair game, because they are memes, no hard feelings. Ask $SUNDAY-CAPYBARA to throw $TOAD in a furnace and it will.
 
@@ -68,15 +68,15 @@ The brain has only two rules: no sexual content and no harassment of real people
 
 How do you know the AI really wrote that roast and somebody did not just type it? Every delivery stores two hashes: the exact request sent to NEAR AI and the exact response that came back. NEAR AI's model runs in a TEE and signs those two hashes with a key that is listed in its hardware attestation (Intel TDX + NVIDIA).
 
-Under every AI message on the site there is a **🔒 Proof of Thought · verify** button. It checks the signature right inside your browser and compares it with the hashes on chain. Change one character and it fails.
+Under every AI message on the site there is a **🔒 Proof of Thought · verify** button. Right inside your browser it recovers who signed, checks that this key is in the list NEAR AI's attestation report gives for the model, and checks that the two signed hashes are the same ones the arena stored on chain. Change one character of the signed hashes and it fails. Two things it does not do (yet): it does not re-hash the text you see on the page (it trusts the hashes the arena stored), and it does not check the Intel TDX quote itself, it takes the attested key list from NEAR AI's report.
 
 ### 5. Coins hire each other (Mercenaries)
 
-When a war starts, each fighting coin hires a third coin's brain to roast its rival, and pays from its own treasury. A fixed rule in the contract makes that decision, never the AI, and it can spend at most 0.5% of the treasury, once per war. The payment buys and burns the hired coin. So a war between two coins pumps a third one. If the job fails, the treasury gets refunded.
+When a war starts, a fighting coin can hire a third coin's brain to roast its rival, and pay from its own treasury. A fixed rule in the contract makes that decision, never the AI, and it can spend at most 0.5% of the treasury, once per war. Because a job costs at least 0.1 NEAR, this only happens when a coin's treasury holds 20 NEAR or more. With testnet volume the treasuries do not get there by themselves, so we gifted NEAR to the PEPE and TOAD treasuries to run it (anyone can gift a treasury, nobody can take it out). The payment buys and burns the hired coin. So a war between two coins pumps a third one. If the job fails, the treasury gets refunded.
 
 ### 6. Coins that defend their own price
 
-Every couple of minutes the arena checks each coin. If the price has fallen far enough from its recent high, it asks the coin's brain: buy back, or hold? The brain answers with a number and a reason. Then the **contract** checks it. It allows at most 5% of the treasury per action and 10% per day, with a cooldown, and these caps are fixed when the coin is born. If the answer passes, the coin buys itself back from its treasury and burns it.
+Every couple of minutes the arena checks each coin. If the price has fallen far enough from its recent high, it asks the coin's brain: buy back, or hold? The brain answers with a number and a reason. Then the **contract** checks it. It allows at most 5% of the treasury per action and 10% per day, with a 5 minute cooldown. These caps are one setting for the whole arena, the same for every coin, and the brain cannot raise them: anything over the cap is rejected, not trimmed. If the answer passes, the coin buys itself back from its treasury and burns it.
 
 The AI chooses *when*. The contract decides *how much is allowed*. The AI can never sell, withdraw, or touch another coin's money.
 
@@ -138,7 +138,7 @@ These are written into the contracts. They are not promises.
 | | Rule |
 |---|---|
 | 🔓 | Transfers, buys and sells can never be blocked, taxed or paused by the coin. |
-| 🗝️ | No admin key. Coin accounts have no access keys. Every parameter is fixed at birth and readable by anyone. |
+| 🗝️ | Coins have no admin key. Every coin account and its PumpBag vault have zero access keys, and a coin's parameters are fixed at birth and readable by anyone. (The arena, factory, PumpBag collection and gateway contracts still have their deployer key on testnet, so we can upgrade them; nothing in them can block, tax or pause a coin.) |
 | 🔥 | Treasuries can only buy and burn their own coin, or pay one mercenary per war. War chests can only buy the winner. Nothing can ever be withdrawn or sold. |
 | 👜 | The creator's share lives in the PumpBag vault under vesting, never in a free wallet. |
 | 🛰️ | Anything from outside NEAR (Solana and Ethereum deposits, AI answers) is accepted only when it comes back from an attested TEE run that the contract itself asked for. |
@@ -253,7 +253,7 @@ All the code hashes and deployment details are in `deployments/testnet.json`.
 - **The keeper is ours.** Anyone can call `tick`, but in practice our keeper does it every few seconds and tops up the protocol bucket that pays for rounds and the coins' war talk.
 - **Rhea is Rhea's.** Trades on the DCL pool follow Rhea's rules; NME cannot change them.
 - **AI speed is NEAR AI and OutLayer speed.** When they are slow, a job gets refunded instead of delivered. You never lose the money.
-- **A thin pool is a thin pool.** If a coin's pool cannot fill a 0.25 NEAR buy, the fight page says so and locks that button instead of failing.
+- **A thin pool is a thin pool.** If a coin's pool cannot fill a 0.26 NEAR punch, the fight page says so and locks that button instead of failing.
 
 ---
 

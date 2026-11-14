@@ -2,13 +2,13 @@
 import { useEffect, useState } from "react";
 import { NME } from "@/lib/config";
 import { compact, near, scale } from "@/lib/format";
-import { Coin, loadBalance, loadCoin, loadJobPrice, quoteSell } from "@/lib/nme";
+import { Coin, type BrainConfig, jobSplit, loadBalance, loadBrainConfig, loadCoin, loadJobPrice, quoteSell } from "@/lib/nme";
 import { minOutOf, quoteBuy, yoctoOf } from "@/lib/quote";
 import { claimDeposit, depositAddress, sendEth, sendSol, walletName, walletState, walletTokens } from "@/lib/xwallet";
 import { CoinIcon } from "./CoinIcon";
 import { matchCoin } from "@/lib/match";
 import { useCoins } from "@/lib/hooks";
-import { HIRE_TGAS, errText, useActions } from "./Actions";
+import { HIRE_TGAS, HIT_MIN_NEAR, errText, useActions } from "./Actions";
 
 type Asset = "NEAR" | "SOL" | "ETH";
 type Intent =
@@ -59,7 +59,7 @@ export function TradeBox({ defaultTicker, compactLayout = false, known }: { defa
   const roster = useCoins();
   const [intent, setIntent] = useState<Intent | null>(null);
   const [coin, setCoin] = useState<Coin | null>(null);
-  const [extra, setExtra] = useState<{ out?: string | null; price?: string; balance?: string | null }>({});
+  const [extra, setExtra] = useState<{ out?: string | null; price?: string; balance?: string | null; brain?: BrainConfig }>({});
 
   async function go(t: string) {
     if (!t.trim()) return;
@@ -91,8 +91,8 @@ export function TradeBox({ defaultTicker, compactLayout = false, known }: { defa
         const out = await quoteBuy(coin, Number(intent.amount));
         if (alive) setExtra({ out });
       } else if (intent.action === "hire") {
-        const price = await loadJobPrice(coin.key).catch(() => undefined);
-        if (alive) setExtra({ price });
+        const [price, brain] = await Promise.all([loadJobPrice(coin.key).catch(() => undefined), loadBrainConfig().catch(() => undefined)]);
+        if (alive) setExtra({ price, brain });
       } else if (intent.action === "sell") {
         const bal = account ? await loadBalance(coin.account, account).catch(() => null) : x ? await walletTokens(x.owner, coin.account).then((t) => t.tokens).catch(() => null) : null;
         const raw = intent.amount === "all" ? bal : (BigInt(Math.round(Number(intent.amount) * 1e6)) * 10n ** 12n).toString();
@@ -176,7 +176,7 @@ export function TradeBox({ defaultTicker, compactLayout = false, known }: { defa
       if (intent.asset !== "NEAR") rows.push(["How", `Sent to your own deposit address, checked in a TEE, credited as NEAR (two price sources, 2% spread), then ${intent.action === "fund_chest" ? "added to the chest" : "spent on the buy"}${intent.asset === "ETH" ? ". Sepolia takes about 15 minutes to be final" : ""}.`]);
     }
     if ((intent.action === "buy" || intent.action === "join_war") && intent.asset === "NEAR") rows.push(["You get about", extra.out === undefined ? "quoting…" : extra.out === null ? "no quote" : `${compact(scale(extra.out, 18))} $${coin.ticker}`]);
-    if (intent.action === "join_war") rows.push(["War hit", Number(intent.amount) >= 0.25 || intent.asset !== "NEAR" ? "yes, if $" + coin.ticker + " is fighting now" : "no — hits start at 0.25 NEAR"]);
+    if (intent.action === "join_war") rows.push(["War hit", Number(intent.amount) >= HIT_MIN_NEAR || intent.asset !== "NEAR" ? "yes, if $" + coin.ticker + " is fighting now" : "no — hits start at 0.26 NEAR"]);
     if (intent.action === "fund_chest") rows.push(["Note", "Chest money never comes back. It only buys and burns when the coin fights."]);
     if (intent.action === "sell") {
       rows.push(["You sell", intent.amount === "all" ? `all your $${coin.ticker} (${extra.balance ? compact(scale(extra.balance, 18)) : "0"})` : `${intent.amount} $${coin.ticker}`]);
@@ -185,7 +185,8 @@ export function TradeBox({ defaultTicker, compactLayout = false, known }: { defa
     if (intent.action === "hire") {
       rows.push(["Job", `${intent.kind}${intent.target ? ` · target ${intent.target}` : ""}`]);
       rows.push(["Prompt", intent.prompt]);
-      rows.push(["You pay", extra.price ? `${compact(near(extra.price))} NEAR · about 90% buys and burns $${coin.ticker}` : "…"]);
+      rows.push(["You pay", extra.price ? `${compact(near(extra.price))} NEAR` : "…"]);
+      if (extra.price && extra.brain) { const sp = jobSplit(extra.price, extra.brain); rows.push(["Burned on delivery", `about ${compact(sp.burn)} NEAR of $${coin.ticker} (${sp.burnPct}%)`]); }
     }
     rows.push(["Signed by", signer ?? (needsX ? (needsX === "sol" ? "Phantom (Solana devnet)" : "an EVM wallet on Sepolia") + (x ? ` — you're on ${walletName(x)} now` : "") : "connect a wallet")]);
     if (!account && x && (!("asset" in intent) || intent.asset === "NEAR")) rows.push(["Paid from", `your NME balance (${xNear === null ? "…" : compact(xNear)} NEAR)`]);

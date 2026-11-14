@@ -19,7 +19,10 @@ export const yocto = (n: number) => {
   return (BigInt(i) * 10n ** 24n + BigInt((f + "0".repeat(24)).slice(0, 24))).toString();
 };
 const STORAGE_DEPOSIT = "1250000000000000000000"; // 0.00125 NEAR, NEP-145 registration on the coin
-const MIN_HIT_NEAR = 0.25; // arena MIN_SCORED_BUY
+// The arena scores a buy on what reaches the pool AFTER its 1% router fee, and that must be ≥ 0.25 NEAR (MIN_SCORED_BUY).
+// So a buy must send at least 0.25 / 0.99 ≈ 0.2526 NEAR to count; a punch sends 0.26.
+export const HIT_MIN_NEAR = 0.2526;
+export const PUNCH_NEAR = 0.26;
 /** hire: ~6 TGas itself + 100 for OutLayer's request_execution + 40 for the result callback (it burns ~24 in total). */
 export const HIRE_TGAS = 170;
 const X_KEY = "nme.xwallet";
@@ -59,7 +62,7 @@ const ActionsCtx = createContext<Ctx | null>(null);
 export const PUNCH_EVENT = "nme:punch";
 export type PunchDetail = { key: string; amountNear: number };
 function announcePunch(key: string, amountNear: number) {
-  if (amountNear >= MIN_HIT_NEAR) window.dispatchEvent(new CustomEvent<PunchDetail>(PUNCH_EVENT, { detail: { key, amountNear } }));
+  if (amountNear >= HIT_MIN_NEAR) window.dispatchEvent(new CustomEvent<PunchDetail>(PUNCH_EVENT, { detail: { key, amountNear } }));
 }
 
 /** A buy signed on this device: register on the coin if needed, then buy. Returns the transaction hash. */
@@ -220,21 +223,21 @@ function Inner({ children }: { children: React.ReactNode }) {
   // One device-signed punch at a time (parallel sends would reuse a nonce and fail); at most a few queued.
   const punchQ = useRef<{ tail: Promise<void>; n: number }>({ tail: Promise.resolve(), n: 0 });
   const punch = useCallback((coin: Coin) => {
-    if (!play) { setSheetAmount(MIN_HIT_NEAR); setSheet(coin); return; }
+    if (!play) { setSheetAmount(PUNCH_NEAR); setSheet(coin); return; }
     const q = punchQ.current;
     if (q.n >= 4) { toast({ tone: "info", text: "Easy, champ: your last punches are still landing." }); return; }
-    announcePunch(coin.key, MIN_HIT_NEAR); // the blow lands on screen now; the chain confirms in a second or two
+    announcePunch(coin.key, PUNCH_NEAR); // the blow lands on screen now; the chain confirms in a second or two
     q.n++;
     q.tail = q.tail.then(async () => {
       try {
-        const minOut = minOutOf(await quoteBuy(coin, MIN_HIT_NEAR)); // after the router fee, 3% slippage floor
+        const minOut = minOutOf(await quoteBuy(coin, PUNCH_NEAR)); // after the router fee, 3% slippage floor
         if (!minOut) {
           const max = await maxBuyNear(coin);
           throw new Error(max > 0.0015
-            ? `$${coin.ticker}'s pool can only take about ${max.toFixed(2)} NEAR per buy right now (thin liquidity at this price), so a ${MIN_HIT_NEAR} NEAR punch can't go through. Nothing was sent.`
+            ? `$${coin.ticker}'s pool can only take about ${max.toFixed(2)} NEAR per buy right now (thin liquidity at this price), so a ${PUNCH_NEAR} NEAR punch can't go through. Nothing was sent.`
             : `$${coin.ticker}'s pool can't take buys right now. Nothing was sent.`);
         }
-        await deviceBuy(play, coin, MIN_HIT_NEAR, minOut);
+        await deviceBuy(play, coin, PUNCH_NEAR, minOut);
         announceChange();
       } catch (e) {
         toast({ tone: "err", text: `That punch missed: ${errText(e)}` });
@@ -314,7 +317,7 @@ function Inner({ children }: { children: React.ReactNode }) {
               return;
             }
             // Phantom / MetaMask: a war buy scores for the wallet itself (JoinWar); otherwise a plain gateway buy.
-            const war = amountNear >= MIN_HIT_NEAR && (await inLiveWar(sheet.key));
+            const war = amountNear >= HIT_MIN_NEAR && (await inLiveWar(sheet.key));
             const body = { key: sheet.key, amount: yocto(amountNear), min_out: minOut };
             const ok = await act({ x: war ? { JoinWar: body } : { Buy: body }, ok: `Bought $${sheet.ticker}${war ? " and landed a hit" : ""}. The tokens sit in your NME balance.` });
             if (ok) { announcePunch(sheet.key, amountNear); setSheet(null); }
@@ -339,7 +342,7 @@ function BuySheet({ coin, initial, payer, onClose, onConnect, send, onError }: {
   coin: Coin; initial?: number; payer: Payer; onClose: () => void; onConnect: () => void;
   send: (amountNear: number, minOut: string) => Promise<void>; onError: (e: unknown) => void;
 }) {
-  const [amount, setAmount] = useState(initial ? String(initial) : "0.25");
+  const [amount, setAmount] = useState(initial ? String(initial) : String(PUNCH_NEAR));
   // Quote keyed by the amount it was made for; a stale quote shows as "quoting…".
   const [q, setQ] = useState<{ for: number; out: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -385,14 +388,14 @@ function BuySheet({ coin, initial, payer, onClose, onConnect, send, onError }: {
           <span className="text-lg font-bold">NEAR</span>
         </div>
         <div className="mt-2 flex gap-2">
-          {[0.25, 1, 5].map((v) => (
+          {[PUNCH_NEAR, 1, 5].map((v) => (
             <button key={v} className="chip bg-paper hover:bg-mint" onClick={() => setAmount(String(v))}>{v} NEAR</button>
           ))}
         </div>
         <dl className="mt-5 space-y-2 text-sm">
           <div className="flex justify-between"><dt>You get about</dt><dd className="num font-bold">{out === undefined ? "quoting…" : out === null ? "no quote" : `${compact(scale(out, 18))} $${coin.ticker}`}</dd></div>
           <div className="flex justify-between"><dt>Arena router fee</dt><dd className="num">{feeBps === null ? "–" : `${feeBps / 100}%`}</dd></div>
-          <div className="flex justify-between"><dt>Counts as a war hit</dt><dd>{n >= MIN_HIT_NEAR ? "yes, if your coin is fighting" : `no — hits start at ${MIN_HIT_NEAR} NEAR`}</dd></div>
+          <div className="flex justify-between"><dt>Counts as a war hit</dt><dd>{n >= HIT_MIN_NEAR ? "yes, if your coin is fighting" : `no — hits start at ${PUNCH_NEAR} NEAR (0.25 after the 1% fee)`}</dd></div>
           {payer && <div className="flex justify-between"><dt>Paid from</dt><dd className="num font-semibold">{payer.kind === "near" ? payer.label : `${payer.label} · NME balance ${payer.balance === null ? "…" : compact(payer.balance)} NEAR`}</dd></div>}
         </dl>
         <p className="mt-4 rounded-xl bg-paper-2 p-3 text-xs leading-relaxed text-ink-2">

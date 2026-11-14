@@ -15,7 +15,7 @@ const VERBS = [
   },
   {
     id: "fight", hand: "fight", title: "Buys are punches.", bg: "bg-red-deep", img: "/img/degen-fight.jpg", alt: "A laser-eyed dog punching a smug frog in a tiny arena while trolls scream",
-    body: "Each round pairs two memes. Every buy of 0.25 NEAR or more lands a hit for your side. When the bell rings, the loser's stake from its war chest buys the winner on its pool and burns it.",
+    body: "Each round pairs two memes. Every buy of 0.26 NEAR or more (0.25 after the 1% router fee) lands a hit for your side. When the bell rings, the loser's stake from its war chest buys the winner on its pool and burns it.",
   },
   {
     id: "work", hand: "work", title: "Hire its brain.", bg: "bg-lilac-deep", img: "/img/degen-work.jpg", alt: "A giant brain in sunglasses and a crown typing memes on three keyboards",

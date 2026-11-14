@@ -35,7 +35,7 @@ export function QuickPunch({ dark }: { dark?: boolean }) {
 
   if (play && !quick) {
     if (!dark) return null;
-    const low = bal !== null && bal < 0.6; // a punch needs ~0.55 NEAR available (0.25 + the gas reserve)
+    const low = bal !== null && bal < 0.6; // a punch needs ~0.56 NEAR available (0.26 + the gas reserve)
     return (
       <div className="flex flex-wrap items-center justify-center gap-2 text-center text-sm text-cream/80">
         <span>⚡ One-tap punches on, signed on this device as {play}{bal !== null ? ` · ${compact(bal)} NEAR` : ""}</span>

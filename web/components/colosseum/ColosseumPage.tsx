@@ -8,7 +8,7 @@ import { ago, clock, compact, near } from "@/lib/format";
 import { describe, displayTicker, prettyText, type Coin } from "@/lib/nme";
 import { quoteBuy } from "@/lib/quote";
 import { FightPoster, phaseOf } from "../FightPoster";
-import { PUNCH_EVENT, type PunchDetail, useActions } from "../Actions";
+import { PUNCH_EVENT, PUNCH_NEAR, type PunchDetail, useActions } from "../Actions";
 import { QuickPunch } from "../QuickPunch";
 import { TONE_BG } from "../Times";
 import type { Bubble, Hit, Outcome } from "./Arena3D";
@@ -124,7 +124,10 @@ export function ColosseumPage() {
 
   // War talk: every AI line from the two fighters, newest first. A new line pops as a small bubble for 8 s, then lives
   // in the War talk panel under the fight bar.
-  const talk = (commentary.data ?? []).filter((x) => x.ticker === keyA || x.ticker === keyB);
+  // Only this match's talk: lines from the two fighters spoken since this round started (a coin's lines from its earlier
+  // fights against other coins stay out). Between matches there is no talk to show.
+  const matchStart = phase && phase.kind !== "next" && arena.data?.round?.id === phase.round ? arena.data.round.start_ms : null;
+  const talk = matchStart === null ? [] : (commentary.data ?? []).filter((x) => (x.ticker === keyA || x.ticker === keyB) && x.ts_ms >= matchStart - 5_000);
   const latest = talk[0];
   const [shownSeq, setShownSeq] = useState<number | null>(null);
   useEffect(() => {
@@ -138,13 +141,13 @@ export function ColosseumPage() {
   const bubble: Bubble = latest && shownSeq === latest.seq ? { side: latest.ticker === keyA ? "a" : "b", text: prettyText(latest.text) } : null;
   const [talkOpen, setTalkOpen] = useState(false);
 
-  // A fighter whose pool can't fill a scoring buy (0.25 NEAR) can't be punched: say so instead of failing on tap.
+  // A fighter whose pool can't fill a scoring buy (0.26 NEAR, 0.25 after the router fee) can't be punched: say so instead of failing on tap.
   const [thin, setThin] = useState<{ a: boolean; b: boolean }>({ a: false, b: false });
   useEffect(() => {
     if (!fighting || !A || !B) return;
     let alive = true;
     const check = async () => {
-      const ok = async (c: Coin) => !!(await quoteBuy(c, 0.25));
+      const ok = async (c: Coin) => !!(await quoteBuy(c, PUNCH_NEAR));
       const [a, b] = await Promise.all([ok(A), ok(B)]);
       if (alive) setThin({ a: !a, b: !b });
     };
@@ -212,14 +215,14 @@ export function ColosseumPage() {
           {/* Phones: the clock on top, both punch buttons side by side under it. Wide screens: button, clock, button. */}
           <div className="grid grid-cols-2 items-center gap-3 border-t border-ink bg-night px-4 py-4 text-cream sm:grid-cols-[auto_1fr_auto] sm:px-8">
             <div className="col-span-2 text-center sm:col-span-1 sm:col-start-2 sm:row-start-1">
-              {!phase ? "…" : phase.kind === "live" ? <span className="flex flex-col items-center leading-tight"><span className="font-display text-2xl tnum sm:text-3xl">{clock(phase.endsMs - now)} left in the fight</span><span className="text-xs text-cream/80 sm:text-sm">Buy 0.25 NEAR or more of either side to land a punch</span></span>
+              {!phase ? "…" : phase.kind === "live" ? <span className="flex flex-col items-center leading-tight"><span className="font-display text-2xl tnum sm:text-3xl">{clock(phase.endsMs - now)} left in the fight</span><span className="text-xs text-cream/80 sm:text-sm">Buy 0.26 NEAR or more of either side to land a punch</span></span>
                 : phase.kind === "bell" ? <>The bell rang {ago(phase.endedMs, now)}. <button className="pointer-events-auto underline" onClick={poke}>Settle the round</button></>
                 : <>No fight on. <button className="underline" onClick={poke}>Open the next round</button></>}
             </div>
             {([["a", A, tA], ["b", B, tB]] as const).map(([side, c, t]) => {
               const dry = fighting && thin[side];
               return (
-                <button key={side} className={`btn min-w-0 px-3 text-ink disabled:opacity-40 ${side === "a" ? "bg-red sm:col-start-1" : "bg-blue sm:col-start-3"} sm:row-start-1`} disabled={!c || !fighting || dry} onClick={() => c && fighting && !dry && punch(c)} title={dry ? `$${t}'s pool can't fill a 0.25 NEAR buy right now` : undefined}>
+                <button key={side} className={`btn min-w-0 px-3 text-ink disabled:opacity-40 ${side === "a" ? "bg-red sm:col-start-1" : "bg-blue sm:col-start-3"} sm:row-start-1`} disabled={!c || !fighting || dry} onClick={() => c && fighting && !dry && punch(c)} title={dry ? `$${t}'s pool can't fill a 0.26 NEAR buy right now` : undefined}>
                   <span className="truncate">{!fighting ? "Round over" : dry ? `$${t} pool too thin` : `${play ? "Punch" : "Buy"} $${t}`}</span>
                 </button>
               );
@@ -259,7 +262,7 @@ export function ColosseumPage() {
           {war && (
             <ul className="mt-5 space-y-3 text-[1.02rem] leading-relaxed">
               <li><strong>A round lasts {Math.round(war.round_duration_ms / 60000)} minutes.</strong> Up to {war.max_pairs} fights run at once.</li>
-              <li><strong>Every buy of 0.25 NEAR or more through NME is a hit</strong> for that coin. Buying elsewhere doesn&apos;t count.</li>
+              <li><strong>Every buy of 0.26 NEAR or more through NME is a hit</strong> for that coin (0.25 reaches the pool after the 1% router fee). Buying elsewhere doesn&apos;t count.</li>
               <li><strong>The biggest war chests get paired.</strong> The stake is {war.chest_bps / 100}% of the smaller chest, and it must be at least {compact(near(war.min_stake))} NEAR.</li>
               <li><strong>One wallet&apos;s hits count up to {war.wallet_cap_bps / 100}% of the stake</strong>, and each side needs {war.min_unique} different wallets or the fight is called off.</li>
               <li><strong>The loser&apos;s stake buys the winner.</strong> Half is burned (supply goes down), half is shared by the winning side&apos;s fighters as spoils.</li>
@@ -274,7 +277,7 @@ export function ColosseumPage() {
             <ol className="space-y-3 text-[1.02rem] leading-relaxed">
               <li><strong>1. Get in line.</strong> Anyone can add NEAR to a coin&apos;s war chest on its coin page. You can&apos;t pick an opponent: the arena pairs the biggest chests, strongest against next strongest.</li>
               <li><strong>2. Ring the bell.</strong> Anyone with a NEAR wallet can poke the arena. It runs whatever is due, in order (settling the last round, opening the next one, price checks, fee claims), and the poker earns a small bounty. The Operator keeper does this on its own when it&apos;s running.</li>
-              <li><strong>3. Fight.</strong> For {war ? Math.round(war.round_duration_ms / 60000) : "a few"} minutes, buys of 0.25 NEAR or more are hits. Then the bell rings again.</li>
+              <li><strong>3. Fight.</strong> For {war ? Math.round(war.round_duration_ms / 60000) : "a few"} minutes, buys of 0.26 NEAR or more are hits. Then the bell rings again.</li>
             </ol>
             <div>
               <p className="text-sm font-semibold">Next in line, by war chest (live)</p>
