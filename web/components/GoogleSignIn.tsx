@@ -101,7 +101,7 @@ export function GoogleSignIn({ onDone }: { onDone?: () => void }) {
 
   if (!NME.googleClientId) return null;
 
-  if (isQuick(play)) return <p className="text-sm">Your quick-punch account is open on this device. Cash it out to your wallet first, then sign in with Google.</p>;
+  if (isQuick(play)) return <p className="text-sm">A quick-punch account is open on this device. Cash it out first (in the quick-punch box on the Colosseum page or below), then sign in with Google.</p>;
 
   if (play) {
     return (

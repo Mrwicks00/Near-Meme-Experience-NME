@@ -33,7 +33,7 @@ export function QuickPunch({ dark }: { dark?: boolean }) {
   }, [play]);
 
   const box = `rounded-2xl border p-3 text-sm ${dark ? "border-cream/25 bg-cream/5 text-cream" : "border-ink bg-paper"}`;
-  const chip = `chip ${dark ? "bg-cream text-ink" : "bg-mint"} disabled:opacity-50`;
+  const chip = "chip bg-mint px-3 py-1 text-xs disabled:opacity-50";
   const run = async (f: () => Promise<unknown>) => { setBusy(true); try { await f(); } finally { setBusy(false); } };
 
   if (play && !quick) {

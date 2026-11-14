@@ -438,12 +438,15 @@ export function Actions({ children }: { children: React.ReactNode }) {
 const noop = () => () => {};
 
 export function WalletButton() {
-  const { account, x, xNear, connect } = useActions();
+  const { account, nearWallet, play, x, xNear, connect } = useActions();
   // Wallets come from this browser's storage: render the label only after hydration (the server can't know it).
   const mounted = useSyncExternalStore(noop, () => true, () => false);
-  const label = !mounted ? null : account
-    ? account.length > 20 ? account.slice(0, 14) + "…" : account
-    : x ? `${walletName(x)} · ${xNear === null ? "…" : compact(xNear)} Ⓝ` : null;
+  const cut = (a: string) => (a.length > 20 ? a.slice(0, 14) + "…" : a);
+  const xLabel = x ? `${walletName(x)} · ${xNear === null ? "…" : compact(xNear)} Ⓝ` : null;
+  // A quick-punch account (a 64-hex implicit account) is a helper, not who you are: show the wallet behind it.
+  const label = !mounted ? null : isQuick(play)
+    ? `${nearWallet ? cut(nearWallet) : xLabel ?? "Quick punches"} · ⚡`
+    : account ? cut(account) : xLabel;
   return (
     <button className={`btn px-4 py-2.5 text-sm ${label ? "bg-paper" : "bg-mint"}`} onClick={connect}>
       {label ?? "Connect wallet"}
